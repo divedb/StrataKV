@@ -98,6 +98,21 @@ tasks requiring the GPU host.
 
 ### Phase C — Metadata plane (index + allocators)
 
+**Status: ✅ implemented 2026-11-19** (C1–C5; offline adaptation: the
+Phase D Python oracle for C5 is deferred until the pybind11 facade
+exists — the fuzz target instead verifies against an independent C++
+oracle (flat-scan model) exactly in no-evict modes and by invariants +
+allocator conservation under eviction, with `STRATAKV_FUZZ_ITERS` to
+extend; verified to 100k ops/mode. xxHash pinned as the
+`third_party/xxhash` submodule (v0.8.2 — the same library FlexKV links,
+so chained digests match by construction). Benchmark (C4): warm-hit
+p50 53.1 µs at 1k blocks on the dev box vs the 100 µs budget —
+`benchmarks/README.md`. Parity (C1): the FlexKV `radixtree.py __main__`
+golden scenario replays with identical match lengths and eviction
+traces; three documented divergences (OOB child-hash read, contiguous
+ready accounting, span-bounded CommitReady ancestor marking) are unit-
+tested in `tests/cpp/radix_index_test.cpp`.)
+
 **Goal:** prefix index and tier allocation with the semantics from ADR 0003.
 
 | # | Task | Deliverable | Size |
@@ -165,7 +180,7 @@ tasks requiring the GPU host.
 | --- | --- | --- |
 | M0 ✅ | E0 audit + clean baseline (done) | — |
 | M1 | A1–A4: baseline ladder closed | **G1** adopt-vs-build decision |
-| M2 | B complete: skeleton + object model + CI | build/test green |
+| M2 ✅ | B complete: skeleton + object model + CI | build/test green |
 | M3 | C+D complete: metadata + control plane, CPU-only | index parity + engine stress pass |
 | M4 | E1–E4: data plane + isolation experiment | **G2** isolation decision with numbers |
 | M5 | F1–F2: vLLM parity on full attention | byte-exact reload, workload parity |

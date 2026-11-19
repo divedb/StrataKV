@@ -27,6 +27,11 @@ if (STRATAKV_BUILD_TESTS)
   add_subdirectory(tests/cpp)
 endif()
 
+option(STRATAKV_BUILD_BENCHMARKS "Build benchmark executables" ON)
+if (STRATAKV_BUILD_BENCHMARKS)
+  add_subdirectory(benchmarks)
+endif()
+
 if (STRATAKV_PYTHON)
   add_subdirectory(bindings/python)
 endif()
