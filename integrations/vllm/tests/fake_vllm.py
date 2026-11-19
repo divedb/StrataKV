@@ -154,10 +154,9 @@ def pump(scheduler_connector: Any, worker_connector: Any,
     deadline = time.monotonic() + timeout_ms / 1000.0
     while time.monotonic() < deadline:
         scheduler_connector.update_connector_output(None)
-        finished = worker_connector.get_finished(set())
-        if finished is not None:
-            done = finished[0] if sending else finished[1]
-            if request_id in done:
-                return True
+        sending_done, recving_done = worker_connector.get_finished(set())
+        done = sending_done if sending else recving_done
+        if done and request_id in done:
+            return True
         time.sleep(0.0005)
     return False
