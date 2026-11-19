@@ -37,3 +37,12 @@ metadata-match and transport-stage instrumentation remains open.
 
 Release remains pending the baseline decision, real hybrid-model
 validation, and finer phase instrumentation. See [roadmap](../roadmap.md).
+
+Follow-up: metadata match, graph queue residence, and host batch enqueue
+histograms pass local CPU/Python suites and ASan/UBSan, plus GCC 12 TSan
+on native Linux (1.73 s). The GPU/vLLM matrix passes 4/4 suites in 47.77 s;
+see `phase-metrics-tsan.log` and `phase-metrics-gpu.log` in the same results
+directory. Batching tests verify graph-versus-batch observation counts;
+Python verifies histogram conservation and Prometheus phase output.
+Device execution timing and instrumentation overhead benchmarking remain
+open; no performance improvement is claimed.

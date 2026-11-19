@@ -72,6 +72,7 @@ std::uint32_t MetadataPlane::num_free_states(std::uint32_t group) const {
 
 MatchResult MetadataPlane::MatchForGet(
     std::span<const common::TokenId> tokens) {
+  common::ScopedLatency timing(match_latency_);
   MatchOptions opts;
   opts.lock_matched = true;
   opts.require_ready = true;  // ADR 0003: complete, landed bundles only.

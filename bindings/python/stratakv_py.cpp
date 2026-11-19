@@ -500,6 +500,11 @@ class PyEngine {
     };
     out["get_latency"] = histogram(snapshot.get_latency);
     out["put_latency"] = histogram(snapshot.put_latency);
+    out["match_latency"] = histogram(plane_->MatchLatency());
+    if (scheduler_ != nullptr) {
+      out["queue_latency"] = histogram(scheduler_->QueueLatency());
+      out["enqueue_latency"] = histogram(scheduler_->EnqueueLatency());
+    }
     return out;
   }
 

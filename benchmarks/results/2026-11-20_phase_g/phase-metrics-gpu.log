@@ -1,0 +1,61 @@
+[  3%] Built target stratakv_ipc_probe
+[ 10%] Built target stratakv_core
+[ 14%] Built target stratakv_gpu_baseline
+[ 18%] Built target gtest
+[ 20%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/metadata_plane.cpp.o
+[ 23%] Built target gtest_main
+[ 25%] Linking CXX static library libstratakv_metadata.a
+[ 30%] Built target stratakv_metadata
+Consolidate compiler generated dependencies of target stratakv_control
+[ 32%] Building CXX object benchmarks/CMakeFiles/stratakv_index_bench.dir/index_bench.cpp.o
+[ 34%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/task_engine.cpp.o
+[ 36%] Linking CXX executable stratakv_index_bench
+[ 36%] Built target stratakv_index_bench
+[ 38%] Linking CXX static library libstratakv_control.a
+[ 40%] Built target stratakv_control
+[ 41%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/host_memory.cpp.o
+[ 43%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/tier_table.cpp.o
+[ 45%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/transport.cpp.o
+[ 47%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/cpu_tier.cpp.o
+[ 49%] Building CUDA object src/CMakeFiles/stratakv_data.dir/data/ipc_cuda.cu.o
+[ 50%] Building CUDA object src/CMakeFiles/stratakv_data.dir/data/transport_cuda.cu.o
+[ 52%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/ipc_transport.cpp.o
+[ 54%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/host_memory_cuda.cpp.o
+[ 56%] Linking CXX static library libstratakv_data.a
+[ 60%] Built target stratakv_data
+Consolidate compiler generated dependencies of target stratakv_gpu_tests
+[ 61%] Building CXX object benchmarks/CMakeFiles/stratakv_gpu_transport_bench.dir/gpu_transport_bench.cpp.o
+[ 63%] Building CXX object src/CMakeFiles/stratakv_transfer_worker.dir/data/transfer_worker_main.cpp.o
+[ 65%] Building CXX object bindings/python/CMakeFiles/stratakv_bindings.dir/stratakv_py.cpp.o
+[ 67%] Building CXX object tests/cpp/CMakeFiles/stratakv_gpu_tests.dir/gpu_transport_test.cpp.o
+[ 69%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_plane_test.cpp.o
+[ 70%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_fuzz_test.cpp.o
+[ 72%] Linking CXX executable stratakv_transfer_worker
+[ 72%] Built target stratakv_transfer_worker
+[ 74%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/task_engine_test.cpp.o
+[ 76%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/cpu_tier_test.cpp.o
+[ 78%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/tier_table_test.cpp.o
+[ 80%] Linking CXX executable stratakv_gpu_transport_bench
+[ 80%] Built target stratakv_gpu_transport_bench
+[ 81%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/transfer_scheduler_test.cpp.o
+[ 83%] Linking CXX executable stratakv_gpu_tests
+[ 83%] Built target stratakv_gpu_tests
+[ 85%] Linking CXX shared module ../../../python/stratakv/_core.cpython-312-x86_64-linux-gnu.so
+lto-wrapper: warning: using serial compilation of 5 LTRANS jobs
+[ 87%] Linking CXX executable stratakv_unit_tests
+[100%] Built target stratakv_unit_tests
+[100%] Built target stratakv_bindings
+Internal ctest changing into directory: /root/autodl-tmp/StrataKV/build-py
+Test project /root/autodl-tmp/StrataKV/build-py
+    Start 1: stratakv_python_tests
+1/4 Test #1: stratakv_python_tests ............   Passed    0.92 sec
+    Start 2: stratakv_connector_tests
+2/4 Test #2: stratakv_connector_tests .........   Passed   45.85 sec
+    Start 3: stratakv_gpu_tests
+3/4 Test #3: stratakv_gpu_tests ...............   Passed    0.90 sec
+    Start 4: stratakv_unit_tests
+4/4 Test #4: stratakv_unit_tests ..............   Passed    0.09 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  47.77 sec

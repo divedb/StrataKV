@@ -1,0 +1,38 @@
+Consolidate compiler generated dependencies of target stratakv_core
+Consolidate compiler generated dependencies of target gtest
+[ 11%] Built target stratakv_core
+[ 16%] Built target gtest
+Consolidate compiler generated dependencies of target stratakv_metadata
+Consolidate compiler generated dependencies of target gtest_main
+[ 19%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/metadata_plane.cpp.o
+[ 25%] Built target gtest_main
+[ 27%] Linking CXX static library libstratakv_metadata.a
+[ 36%] Built target stratakv_metadata
+Consolidate compiler generated dependencies of target stratakv_control
+[ 38%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/task_engine.cpp.o
+[ 41%] Linking CXX static library libstratakv_control.a
+[ 44%] Built target stratakv_control
+Consolidate compiler generated dependencies of target stratakv_data
+[ 47%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/transport.cpp.o
+[ 50%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/host_memory.cpp.o
+[ 52%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/tier_table.cpp.o
+[ 55%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/cpu_tier.cpp.o
+[ 58%] Linking CXX static library libstratakv_data.a
+[ 61%] Built target stratakv_data
+Consolidate compiler generated dependencies of target stratakv_unit_tests
+[ 63%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_fuzz_test.cpp.o
+[ 66%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_plane_test.cpp.o
+[ 69%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/task_engine_test.cpp.o
+[ 72%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/cpu_tier_test.cpp.o
+[ 75%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/transfer_scheduler_test.cpp.o
+[ 77%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/tier_table_test.cpp.o
+[ 80%] Linking CXX executable stratakv_unit_tests
+[100%] Built target stratakv_unit_tests
+Internal ctest changing into directory: /root/autodl-tmp/StrataKV/build-tsan12
+Test project /root/autodl-tmp/StrataKV/build-tsan12
+    Start 1: stratakv_unit_tests
+1/1 Test #1: stratakv_unit_tests ..............   Passed    1.73 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.73 sec

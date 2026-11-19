@@ -70,3 +70,13 @@ Serve this text from the application's metrics endpoint. The exporter
 starts no threads, HTTP server, or dependency; histogram buckets are
 converted to cumulative seconds as required by Prometheus. Counters reset
 when the engine is recreated. Scraping does not advance transfers.
+
+Phase histograms add `match_latency`, `queue_latency`, and `enqueue_latency`
+to the snapshot. Match covers every `MatchForGet` call, including exceptions
+and index lock waits. Queue measures residence from graph insertion until
+flush, one observation per flushed graph; cancellation before flush produces
+no sample. Enqueue measures host call duration per batch, including exceptions
+and any synchronous callbacks. It excludes asynchronous CUDA completion.
+Queue/enqueue are absent for the simulation executor. These histograms are
+individually coherent; a snapshot across phases is not globally atomic.
+Prometheus exports them as `stratakv_phase_<phase>_duration_seconds`.

@@ -26,6 +26,7 @@ void TransferScheduler::Submit(
     throw LogicError("TransferScheduler: shut down");
   }
   Queued queued;
+  queued.queued_at = std::chrono::steady_clock::now();
   queued.owner = owner;
   queued.sink = &sink;
   queued.ops.reserve(graph.ops().size());
@@ -68,12 +69,14 @@ void TransferScheduler::FlushLocked(CompletionSink* /*caller_sink*/) {
     queue_.pop_front();
     pending_ops_ -= queued.ops.size();
     owners_waiting_.erase(queued.owner.id());
+    queue_latency_.Observe(std::chrono::steady_clock::now() - queued.queued_at);
     auto& ops = by_sink[queued.sink];
     for (TransferOp& op : queued.ops) {
       ops.push_back(std::move(op));
     }
   }
   for (auto& [sink, ops] : by_sink) {
+    common::ScopedLatency timing(enqueue_latency_);
     transport_->Enqueue(std::move(ops), *sink);
   }
 }

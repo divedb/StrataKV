@@ -262,14 +262,16 @@ and terminal-state snapshot across concurrent replacement/reclamation.
 G3 implements coherent cumulative counters (submission, outcome,
 rejection, active/peak/retained tasks), bounded get/put submission-to-terminal
 latency histograms, Python snapshots, and dependency-free Prometheus text
-export. Finer metadata-match and transport-stage histograms remain open;
+export. Metadata match, per-graph queue residence, and per-batch host enqueue
+histograms are now exposed in native/Python metrics and Prometheus.
+Asynchronous device execution timing remains open;
 task latency includes batching and is not kernel timing.
 
 G4 adds optional Doxygen generation and a CI documentation artifact,
 [API/ownership and metrics guide](docs/api.md),
 [hardening instructions](docs/hardening.md), [ADR index](docs/README.md),
 and an unreleased CHANGELOG. Release/tag remains pending Phase A's
-baseline decision, F4 real hybrid-model validation, and the remaining G3
+baseline decision, F4 real hybrid-model validation, and device-side G3
 instrumentation. No v0.1.0 release is claimed.
 
 Validation evidence: [Phase G report](docs/phase-g-validation.md).

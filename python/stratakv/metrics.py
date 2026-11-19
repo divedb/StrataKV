@@ -15,9 +15,13 @@ def prometheus_text(snapshot: dict) -> str:
     for field in ("in_flight", "peak_in_flight", "retained_tasks"):
         name = f"stratakv_tasks_{field}"
         lines += [f"# TYPE {name} gauge", f"{name} {snapshot[field]}"]
-    for direction in ("get", "put"):
+    for direction in ("get", "put", "match", "queue", "enqueue"):
+        if f"{direction}_latency" not in snapshot:
+            continue
         hist = snapshot[f"{direction}_latency"]
-        name = f"stratakv_task_{direction}_duration_seconds"
+        name = (f"stratakv_task_{direction}_duration_seconds"
+                if direction in ("get", "put") else
+                f"stratakv_phase_{direction}_duration_seconds")
         lines.append(f"# TYPE {name} histogram")
         cumulative = 0
         for bound, count in zip([*hist["bounds_us"], None], hist["buckets"]):

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "stratakv/common/handles.h"
+#include "stratakv/common/metrics.h"
 #include "stratakv/common/model_layout.h"
 #include "stratakv/metadata/allocator.h"
 #include "stratakv/metadata/index.h"
@@ -146,7 +147,11 @@ class MetadataPlane {
            group_spec.layer_indices.size();
   }
 
+  /// \brief Match call wall time, including failed calls and lock waits.
+  common::LatencyHistogram::Snapshot MatchLatency() const { return match_latency_.Read(); }
+
  private:
+  common::LatencyHistogram match_latency_;
   PutPlan PlanLocked(std::span<const common::TokenId> tokens,
                      bool stage);
 

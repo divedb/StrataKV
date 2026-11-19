@@ -172,6 +172,10 @@ TEST(TransferSchedulerTest, BatchingCoalescesOwners) {
                      sink);
   }
   EXPECT_EQ(raw->enqueue_count(), static_cast<std::size_t>(2));
+  EXPECT_EQ(scheduler.QueueLatency().count, 7u);
+  EXPECT_EQ(scheduler.EnqueueLatency().count, 2u);
+  scheduler.Flush();
+  EXPECT_EQ(scheduler.EnqueueLatency().count, 2u);
 }
 
 TEST(TransferSchedulerTest, CancelDropsQueuedOps) {

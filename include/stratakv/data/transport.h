@@ -10,6 +10,7 @@
 
 #include "stratakv/common/exceptions.h"
 #include "stratakv/common/handles.h"
+#include "stratakv/common/metrics.h"
 #include "stratakv/control/executor.h"
 #include "stratakv/control/task.h"
 
@@ -98,7 +99,12 @@ class TransferScheduler {
   /// \brief Ops queued but not yet flushed (introspection/tests).
   std::size_t pending_ops() const;
 
+  /// \brief Host queue residence per flushed graph and Enqueue call time per batch.
+  common::LatencyHistogram::Snapshot QueueLatency() const { return queue_latency_.Read(); }
+  common::LatencyHistogram::Snapshot EnqueueLatency() const { return enqueue_latency_.Read(); }
+
  private:
+  common::LatencyHistogram queue_latency_, enqueue_latency_;
   void FlushLocked(CompletionSink* sink);
 
   const std::unique_ptr<ITransport> transport_;
@@ -107,6 +113,7 @@ class TransferScheduler {
 
   mutable std::mutex mu_;
   struct Queued {
+    std::chrono::steady_clock::time_point queued_at;
     common::TaskHandle owner;
     std::vector<TransferOp> ops;
     CompletionSink* sink;

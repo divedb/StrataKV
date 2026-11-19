@@ -221,6 +221,9 @@ def test_metrics_export_and_terminal_record_reclamation():
         assert engine.forget(get)
         snapshot = engine.metrics()
         assert snapshot["submitted_puts"] == snapshot["submitted_gets"] == 1
+        assert snapshot["match_latency"]["count"] == 1
+        assert sum(snapshot["match_latency"]["buckets"]) == 1
+        assert "queue_latency" not in snapshot  # Inline executor has no transport.
         assert snapshot["succeeded"] == 2
         assert snapshot["retained_tasks"] == snapshot["in_flight"] == 0
         for direction in ("get", "put"):
@@ -229,6 +232,7 @@ def test_metrics_export_and_terminal_record_reclamation():
             assert hist["sum_seconds"] >= 0
         exported = prometheus_text(snapshot)
         assert 'stratakv_task_get_duration_seconds_bucket{le="+Inf"} 1' in exported
+        assert 'stratakv_phase_match_duration_seconds_bucket{le="+Inf"} 1' in exported
         assert "stratakv_tasks_succeeded_total 2\n" in exported
     finally:
         engine.shutdown()
