@@ -9,10 +9,9 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# Cloned third-party sources (pinned by scripts/fetch_third_party.sh;
-# converted to real submodules when network allows — until then they must
-# not be committed as ordinary trees).
-third_party/googletest/
+# Cloned third-party sources not yet converted to submodules (fetched by
+# scripts/fetch_third_party.sh). googletest is a real submodule and must
+# NOT be ignored.
 third_party/pybind11/
 third_party/xxhash/
 

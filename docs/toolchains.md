@@ -25,15 +25,16 @@ No FetchContent/ExternalProject fetching at configure time, no Conan/vcpkg.
 
 ## Offline development (current environment)
 
-GitHub network access is unavailable in the current development
-environment. Consequences and mitigations:
+GitHub network access was unavailable when Phase B started and is now
+restored; googletest has been converted to a real Git submodule (pin
+`v1.14.0`), and tests run against genuine GoogleTest by default. Notes:
 
-1. **Unit tests**: configure with `-DSTRATAKV_GTEST_SHIM=ON` to use the
-   bundled GoogleTest-compatible bootstrap shim
-   (`tests/cpp/gtest_shim.h`). The shim is a development convenience; CI
-   and networked environments must use the pinned googletest.
+1. **Unit tests**: default configuration uses the pinned submodule. If the
+   submodule is missing and network is unavailable, configure with
+   `-DSTRATAKV_GTEST_SHIM=ON` to use the bundled bootstrap shim
+   (`tests/cpp/gtest_shim.h`) — development convenience only.
 2. **Python bindings**: no shim exists. `STRATAKV_PYTHON=ON` fails loudly
-   until `third_party/pybind11` is fetched.
+   until `third_party/pybind11` is fetched (script or submodule).
 3. **Formatting/lint**: `clang-format` and `clang-tidy` binaries are not
    installed locally; configs are present (`.clang-format`,
    `.clang-tidy`) and enforced in review. Install via brew/apt when
@@ -42,12 +43,18 @@ environment. Consequences and mitigations:
 ## Verified local builds
 
 ```bash
+# Real GoogleTest (default since the googletest submodule landed)
+cmake -S . -B build-gtest -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-gtest && ctest --test-dir build-gtest
+
+# Sanitizers with real GoogleTest
+cmake -S . -B build-gtest-asan -DCMAKE_BUILD_TYPE=Debug \
+  -DSTRATAKV_ENABLE_SANITIZERS=ON
+cmake --build build-gtest-asan && ctest --test-dir build-gtest-asan
+
+# Offline shim fallback (no submodule, no network)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSTRATAKV_GTEST_SHIM=ON
 cmake --build build && ctest --test-dir build
-
-cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
-  -DSTRATAKV_GTEST_SHIM=ON -DSTRATAKV_ENABLE_SANITIZERS=ON
-cmake --build build-asan && ctest --test-dir build-asan
 ```
 
-Both configurations: 17/17 tests passing (2026-11-19).
+All configurations: 17/17 tests passing (2026-11-19).

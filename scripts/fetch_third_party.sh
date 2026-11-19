@@ -24,7 +24,10 @@ fetch_pinned() {
   git clone --depth 1 --branch "${tag}" "${url}" "${ROOT}/third_party/${dir}"
 }
 
-fetch_pinned googletest https://github.com/google/googletest.git v1.14.0
+# googletest is a real Git submodule now; initialize it instead of cloning.
+if [[ ! -d "${ROOT}/third_party/googletest/.git" ]]; then
+  git submodule update --init -- "${ROOT}/third_party/googletest"
+fi
 fetch_pinned pybind11   https://github.com/pybind/pybind11.git   v2.13.6
 fetch_pinned xxhash     https://github.com/Cyan4973/xxHash.git   v0.8.2
 

@@ -115,7 +115,7 @@ TEST(ModelLayoutTest, DeepSeekV4ShapedThreeGroups) {
   EXPECT_EQ(layout.GroupForLayer(71)->name, "indexer_state");
 }
 
-TEST(ModelLayoutDeathTest, RejectsMalformedInputs) {
+TEST(ModelLayoutValidationTest, RejectsMalformedInputs) {
   // Empty group set.
   EXPECT_THROW(ModelLayout::FromGroups({}), std::invalid_argument);
 

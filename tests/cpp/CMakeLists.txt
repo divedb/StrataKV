@@ -11,7 +11,8 @@ if (EXISTS "${PROJECT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
   add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/googletest"
     "${CMAKE_BINARY_DIR}/third_party/googletest-build" EXCLUDE_FROM_ALL)
   add_executable(stratakv_unit_tests ${STRATAKV_UNIT_TEST_SOURCES})
-  target_link_libraries(stratakv_unit_tests PRIVATE stratakv_core gtest)
+  target_link_libraries(stratakv_unit_tests PRIVATE stratakv_core gtest
+    gtest_main)
 elseif (STRATAKV_GTEST_SHIM)
   message(STATUS "Using offline GoogleTest bootstrap shim (STRATAKV_GTEST_SHIM=ON)")
   add_executable(stratakv_unit_tests
