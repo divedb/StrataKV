@@ -20,6 +20,25 @@ include(CompilerWarnings)
 include(Sanitizers)
 include(Xxhash)
 
+# --- GPU support (Phase E lineage; roadmap §2 E-environments) ---
+# First CUDA consumer is the Phase 0 capability baseline benchmark
+# (benchmarks/gpu_baseline_bench.cu). stratakv_data gains CUDA sources
+# (transport, IPC source, pinning) when the STRATAKV_GPU build lands.
+if(STRATAKV_GPU)
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
+      set(CMAKE_CUDA_ARCHITECTURES native CACHE STRING
+        "CUDA architectures to compile for")
+    else()
+      # CMake < 3.24 has no 'native'; set your GPU's SM version here.
+      set(CMAKE_CUDA_ARCHITECTURES 89 CACHE STRING
+        "CUDA architectures to compile for")
+    endif()
+  endif()
+endif()
+
 add_subdirectory(src)
 
 if (STRATAKV_BUILD_TESTS)

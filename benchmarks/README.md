@@ -16,18 +16,44 @@ cmake -S . -B build && cmake --build build -j
 ./build/benchmarks/stratakv_index_bench
 ```
 
-Reference (Apple Silicon dev box, Release, 2026-11-19):
+Reference numbers:
 
-| scenario | p50 µs | p95 µs | p99 µs | matched |
-| --- | --- | --- | --- | --- |
-| deep_warm_hit_1k | 53.1 | 59.1 | 74.2 | 1024 |
-| deep_miss_1k | 33.4 | 38.0 | 43.9 | 0 |
-| deep_partial_512_of_1k | 38.5 | 43.7 | 50.4 | 512 |
-| single_node_warm_hit_1k | 41.6 | 47.2 | 52.4 | 1024 |
+| environment | deep_warm_hit_1k p50 µs | deep_miss_1k p50 µs | log |
+| --- | --- | --- | --- |
+| Apple Silicon dev box, Release, 2026-11-19 | 53.1 | 33.4 | (session record) |
+| WSL2 / RTX 4080 SUPER, Release, 2026-11-19 | 26.0 | 22.1 | `results/2026-11-19_wsl2_rtx4080super/index_bench.log` |
 
-Roadmap budget: p50 < 100 µs at 1k blocks — PASS with ~2× headroom.
+Roadmap budget: p50 < 100 µs at 1k blocks — PASS with headroom on both.
 `deep_partial_512_of_1k` requires a state-bundle boundary at 512 (ADR
 0003); without one a hybrid partial match correctly truncates to 0.
+
+## gpu_baseline (Phase 0 — raw CUDA data-plane floor, STRATAKV_GPU=ON)
+
+`stratakv_gpu_baseline` measures the CUDA floor under the data plane on
+the current GPU environment: peak contiguous bandwidth; task-shaped
+transfers at the E0 block geometry (24 layers × 8 KiB = 192 KiB block)
+across three methods (contig / per-(block,layer) memcpy / strided
+kernel) × host memory kinds (pinned / registered / pageable) ×
+directions × {1,4,16,64} blocks in sync and pipelined timing modes;
+per-task fixed overhead (0-byte extrapolation); micro costs. Every row
+is XXH3-verified against a golden pattern before timing. The harness
+probes SM access to registered/pageable memory (forked child; WSL2
+faults) and gates kernel scenarios on the result.
+
+Methodology, environment record, results, and findings:
+[`phase0_gpu_baseline.md`](phase0_gpu_baseline.md). Baseline log (WSL2 /
+RTX 4080 SUPER, 2026-11-19): `results/2026-11-19_wsl2_rtx4080super/phase0_gpu_baseline.log`.
+
+Run:
+
+```bash
+cmake -S . -B build-gpu -DCMAKE_BUILD_TYPE=Release -DSTRATAKV_GPU=ON
+cmake --build build-gpu -j && ./build-gpu/benchmarks/stratakv_gpu_baseline
+```
+
+Headline (pinned, 4-block task, SYNC mode): contig 55.5 µs, kernel
+74.9 µs, memcpy24 409.6 µs; per-task fixed overhead ≈ 22–32 µs — vs
+FlexKV v1.0.0's 10–20 ms per task on the same payload class (E0).
 
 ## Phase A3 harness — not yet ported
 

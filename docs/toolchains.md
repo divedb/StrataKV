@@ -11,6 +11,10 @@
 
 GPU builds are intentionally out of scope until Phase E; the object model
 and metadata plane are CPU-only and must stay buildable on any host.
+Exception: the Phase 0 capability baseline
+(`benchmarks/gpu_baseline_bench.cu`) builds under `STRATAKV_GPU=ON`
+ahead of the full Phase E data plane; see below for the verified local
+GPU toolchain and its deviations.
 
 ## Third-party pins
 
@@ -58,3 +62,33 @@ cmake --build build && ctest --test-dir build
 ```
 
 All configurations: 17/17 tests passing (2026-11-19).
+
+## Verified GPU build (WSL2, Phase 0 baseline session, 2026-11-19)
+
+Host: WSL2 kernel 6.6.87.2, RTX 4080 SUPER (sm_89), driver 610.88
+(CUDA UMD 13.3), nvcc CUDA 12.0 (V12.0.140), gcc 13.3.0, CMake 3.28.3.
+
+```bash
+cmake -S . -B build-gpu -DCMAKE_BUILD_TYPE=Release -DSTRATAKV_GPU=ON
+cmake --build build-gpu -j && ctest --test-dir build-gpu
+./build-gpu/benchmarks/stratakv_gpu_baseline
+```
+
+Deviations and environment contracts (details and evidence in
+`benchmarks/phase0_gpu_baseline.md`):
+
+1. **Toolkit 12.0, not 12.8** (12.8 unavailable locally). nvcc 12.0 +
+   gcc 13.3 — beyond nvcc 12.0's official gcc ceiling — compiles and
+   runs all baseline kernels correctly on this box; treat with mild
+   suspicion and keep CUDA >12.0 API surface out of Phase E until the
+   toolkit is upgraded or the pin is re-verified.
+2. **CMAKE_CUDA_ARCHITECTURES** defaults to `native` (CMake ≥ 3.24;
+   here: sm_89). On older CMake, set your SM version explicitly.
+3. **WSL2 SM-access constraint**: kernels must not touch
+   `cudaHostRegister`'d or pageable host memory here (illegal memory
+   access; copy-engine `cudaMemcpyAsync` to the same memory is fine).
+   `cudaHostRegister` succeeds and `cudaDeviceReset` cannot recover a
+   faulted context on this platform. The baseline harness probes this
+   in a forked child before any parent CUDA state exists.
+4. Sanitizers are not applied to CUDA targets (nvcc device TUs do not
+   support ASan/UBSan); CPU targets keep the sanitizer machinery.

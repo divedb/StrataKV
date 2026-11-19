@@ -55,8 +55,13 @@ plane, and engineering rigor (testing, sanitizers, CI, docs).
 | **E0** | Remote RTX 3080 Ti host; FlexKV v1.0.0 checkout; patched vLLM 0.10.1.1 `.venv`; `serve_qwen2_clean.py` harness | Historical control; flow tracing |
 | **E1** | Same host; `git worktree` at **v1.2.1**; cloned `.venv` with flexkv repointed (vLLM patch identical) | Middle baseline: what did Sept→Dec 2025 recover? |
 | **E2** | Upstream FlexKV `main` + **vLLM ≥ 0.17.2** (unpatched, mainline connector); fresh venv; system deps (`liburing`, `libxxhash`, `libhiredis`) | Modern reference; the "adopt vs build" gate input |
+| **E-Local** | Local WSL2 host (RTX 4080 SUPER, sm_89, CUDA 12.0, driver 610.88; toolchain deviations in `docs/toolchains.md`) | Phase 0 raw-GPU floor + local dev GPU: `benchmarks/phase0_gpu_baseline.md` (recorded 2026-11-19; per-task fixed overhead ≈ 22–32 µs vs E0's 10–20 ms; WSL2 forbids SM access to registered/pageable host memory) |
 
-E0 is done. E1 and E2 are the first deliverables of Phase A below.
+E0 is done. E1 and E2 are the first deliverables of Phase A below. GPU
+acceleration became available locally (WSL2) on 2026-11-19; the Phase 0
+local baseline is recorded and the Phase E deferred items (CUDA
+transport, IPC source, pinning, E4) can proceed here, with the platform
+constraint above shaping the pinning plan.
 
 ---
 

@@ -1,0 +1,12 @@
+# StrataKV index_bench (Phase C4) — environment baseline run
+date: 2026-11-19T11:52:13Z
+harness commit: 563cb8f54086d3c718f1681f010f217a5b34d7bd (worktree: DIRTY)
+os: Linux 6.6.87.2-microsoft-standard-WSL2 (6.6.87.2-microsoft-standard-WSL2)
+cpu: 32 cores | gcc 13 | build: build-cpu, Release
+
+scenario                     p50_us     p95_us     p99_us  matched
+deep_warm_hit_1k               26.0       27.9       45.1     1024
+deep_miss_1k                   22.1       22.3       28.0        0
+deep_partial_512_of_1k         24.1       24.9       34.4      512
+single_node_warm_hit_1k        25.9       27.2       39.5     1024
+budget p50 < 100us on warm-hit paths: PASS

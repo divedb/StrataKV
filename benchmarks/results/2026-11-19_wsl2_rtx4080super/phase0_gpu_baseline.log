@@ -1,0 +1,200 @@
+# StrataKV Phase 0 GPU baseline — official run
+date: 2026-11-19T11:51:34Z
+harness commit: 563cb8f54086d3c718f1681f010f217a5b34d7bd (worktree: DIRTY)
+os: Linux 6.6.87.2-microsoft-standard-WSL2 (6.6.87.2-microsoft-standard-WSL2)
+gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0 | cmake: cmake version 3.28.3 | nvcc: Build cuda_12.0.r12.0/compiler.32267302_0
+build: build-gpu, Release, STRATAKV_GPU=ON, CMAKE_CUDA_ARCHITECTURES=native (sm_89)
+
+# nvidia-smi before
+Thu Nov 19 19:51:34 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 610.57.01              KMD Version: 610.88        CUDA UMD Version: 13.3     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4080 ...    On  |   00000000:01:00.0  On |                  N/A |
+|  0%   28C    P8              7W /  320W |    1472MiB /  16376MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A              36      G   /Xwayland                             N/A      |
++-----------------------------------------------------------------------------------------+
+
+clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W], temperature.gpu, persistence_mode
+210 MHz, 405 MHz, 7.95 W, 28, Enabled
+
+== Environment ==
+device 0: NVIDIA GeForce RTX 4080 SUPER (compute capability 8.9)
+driver API 13.30 | runtime API 12.0
+sm clock max 2595 MHz | mem clock max 11501 MHz | bus 256-bit | L2 65536 KiB
+ECC off | global mem 15.99 GiB
+block geometry: 24 layers x 8192 B = 196608 B per block (Qwen2-0.5B-shaped)
+SM access probed: pinned=OK registered=FAULTS pageable=FAULTS (copy-engine access works for all kinds)
+harness: benchmarks/gpu_baseline_bench.cu (methodology: benchmarks/phase0_gpu_baseline.md)
+
+== Peak contiguous bandwidth (decimal GB/s, p50 of sync'd async copies) ==
+scenario                     p50_us         GB/s
+h2d_pinned_256MB            12281.4        21.86
+d2h_pinned_256MB            11237.2        23.89
+h2d_pageable_256MB          14587.9        18.40
+d2h_pageable_256MB          21473.0        12.50
+d2d_256MB                     962.0       279.03
+
+== Task-shaped transfers, SYNC mode (submit -> completion per task) ==
+scenario                           blocks      bytes     p50_us     p95_us     p99_us     GB/s
+h2d/pinned/contig                       1     196608       28.2       50.4       80.1     6.97
+h2d/pinned/contig                       4     786432       55.5       80.5      101.2    14.16
+h2d/pinned/contig                      16    3145728      170.5      182.0      191.5    18.45
+h2d/pinned/contig                      64   12582912      600.1      651.2      668.0    20.97
+h2d/pinned/kernel                       1     196608       32.9       41.5       51.0     5.98
+h2d/pinned/kernel                       4     786432       82.4       93.9      126.2     9.55
+h2d/pinned/kernel                      16    3145728      195.4      212.6      247.3    16.10
+h2d/pinned/kernel                      64   12582912      641.9      682.4      710.1    19.60
+h2d/pinned/memcpy24                     1     196608      100.8      204.9      277.8     1.95
+h2d/pinned/memcpy24                     4     786432      405.4      475.7      942.8     1.94
+h2d/pinned/memcpy24                    16    3145728     1584.4     2643.6     3158.8     1.99
+h2d/pinned/memcpy24                    64   12582912     6372.6     6609.8     6908.8     1.97
+h2d/registered/contig                   1     196608       30.3       41.0       50.6     6.48
+h2d/registered/contig                   4     786432       57.8       70.5       77.9    13.60
+h2d/registered/contig                  16    3145728      166.7      186.8      214.1    18.87
+h2d/registered/contig                  64   12582912      613.1      641.4      692.1    20.52
+h2d/registered/kernel                   1     196608       SKIP          -          -        -
+h2d/registered/kernel                   4     786432       SKIP          -          -        -
+h2d/registered/kernel                  16    3145728       SKIP          -          -        -
+h2d/registered/kernel                  64   12582912       SKIP          -          -        -
+h2d/pageable/contig                     1     196608       37.1       46.3       92.4     5.30
+h2d/pageable/contig                     4     786432       76.0      101.6      128.2    10.34
+h2d/pageable/contig                    16    3145728      204.2      230.4      297.3    15.41
+h2d/pageable/contig                    64   12582912      722.2      897.3     1011.1    17.42
+h2d/pageable/kernel                     1     196608       SKIP          -          -        -
+h2d/pageable/kernel                     4     786432       SKIP          -          -        -
+h2d/pageable/kernel                    16    3145728       SKIP          -          -        -
+h2d/pageable/kernel                    64   12582912       SKIP          -          -        -
+h2d/pageable/memcpy24                   1     196608      121.8      158.1      197.8     1.61
+h2d/pageable/memcpy24                   4     786432      415.0      645.2      702.5     1.90
+h2d/pageable/memcpy24                  16    3145728     1657.3     2484.5     2952.4     1.90
+h2d/pageable/memcpy24                  64   12582912     6648.9     6967.8     7078.8     1.89
+d2h/pinned/contig                       1     196608       28.0       29.9       38.9     7.03
+d2h/pinned/contig                       4     786432       52.4       56.8       67.9    15.02
+d2h/pinned/contig                      16    3145728      149.9      169.0      183.0    20.98
+d2h/pinned/contig                      64   12582912      552.1      587.5      637.2    22.79
+d2h/pinned/kernel                       1     196608       31.1       36.4       43.6     6.32
+d2h/pinned/kernel                       4     786432       81.0       92.0      112.6     9.71
+d2h/pinned/kernel                      16    3145728      305.4      345.0      386.5    10.30
+d2h/pinned/kernel                      64   12582912     1167.7     1243.5     1286.7    10.78
+d2h/pinned/memcpy24                     1     196608      102.0      186.7      228.7     1.93
+d2h/pinned/memcpy24                     4     786432      389.3      456.4      754.4     2.02
+d2h/pinned/memcpy24                    16    3145728     1518.7     1728.1     1812.4     2.07
+d2h/pinned/memcpy24                    64   12582912     6199.6     6605.2     7307.2     2.03
+d2h/registered/contig                   1     196608       29.9       37.4       47.3     6.58
+d2h/registered/contig                   4     786432       58.3       66.7       76.8    13.50
+d2h/registered/contig                  16    3145728      180.0      194.0      213.5    17.48
+d2h/registered/contig                  64   12582912      598.1      627.5      636.3    21.04
+d2h/registered/kernel                   1     196608       SKIP          -          -        -
+d2h/registered/kernel                   4     786432       SKIP          -          -        -
+d2h/registered/kernel                  16    3145728       SKIP          -          -        -
+d2h/registered/kernel                  64   12582912       SKIP          -          -        -
+d2h/pageable/contig                     1     196608       75.2      123.5      163.3     2.61
+d2h/pageable/contig                     4     786432      146.1      166.9      226.3     5.38
+d2h/pageable/contig                    16    3145728      324.8      388.1      425.4     9.68
+d2h/pageable/contig                    64   12582912     1047.2     1296.9     1476.2    12.02
+d2h/pageable/kernel                     1     196608       SKIP          -          -        -
+d2h/pageable/kernel                     4     786432       SKIP          -          -        -
+d2h/pageable/kernel                    16    3145728       SKIP          -          -        -
+d2h/pageable/kernel                    64   12582912       SKIP          -          -        -
+d2h/pageable/memcpy24                   1     196608      490.7      851.6     1007.1     0.40
+d2h/pageable/memcpy24                   4     786432     1974.7     2892.6     3091.9     0.40
+d2h/pageable/memcpy24                  16    3145728     9897.7    10520.7    12026.9     0.32
+d2h/pageable/memcpy24                  64   12582912    31439.2    35785.0    35785.0     0.40
+
+== Task-shaped transfers, PIPELINED mode (K tasks back-to-back, one sync; drain-and-batch shape) ==
+scenario                           blocks      bytes  p50_us/task         GB/s
+h2d/pinned/contig                       1     196608         11.2        17.54
+h2d/pinned/contig                       4     786432         37.8        20.82
+h2d/pinned/contig                      16    3145728        144.2        21.82
+h2d/pinned/contig                      64   12582912        569.5        22.10
+h2d/pinned/kernel                       1     196608         13.1        14.95
+h2d/pinned/kernel                       4     786432         51.3        15.32
+h2d/pinned/kernel                      16    3145728        164.9        19.08
+h2d/pinned/kernel                      64   12582912        606.6        20.74
+h2d/pinned/memcpy24                     1     196608         92.3         2.13
+h2d/pinned/memcpy24                     4     786432        373.7         2.10
+h2d/pinned/memcpy24                    16    3145728       1528.8         2.06
+h2d/pinned/memcpy24                    64   12582912       6242.4         2.02
+h2d/registered/contig                   1     196608         12.1        16.26
+h2d/registered/contig                   4     786432         37.9        20.77
+h2d/registered/contig                  16    3145728        145.7        21.59
+h2d/registered/contig                  64   12582912        579.9        21.70
+h2d/registered/kernel                   1     196608         SKIP            -
+h2d/registered/kernel                   4     786432         SKIP            -
+h2d/registered/kernel                  16    3145728         SKIP            -
+h2d/registered/kernel                  64   12582912         SKIP            -
+h2d/pageable/contig                     1     196608         25.3         7.77
+h2d/pageable/contig                     4     786432         48.7        16.15
+h2d/pageable/contig                    16    3145728        178.1        17.67
+h2d/pageable/contig                    64   12582912        700.0        17.97
+h2d/pageable/kernel                     1     196608         SKIP            -
+h2d/pageable/kernel                     4     786432         SKIP            -
+h2d/pageable/kernel                    16    3145728         SKIP            -
+h2d/pageable/kernel                    64   12582912         SKIP            -
+h2d/pageable/memcpy24                   1     196608         95.8         2.05
+h2d/pageable/memcpy24                   4     786432        396.0         1.99
+h2d/pageable/memcpy24                  16    3145728       1694.3         1.86
+h2d/pageable/memcpy24                  64   12582912       6353.9         1.98
+d2h/pinned/contig                       1     196608         10.4        18.82
+d2h/pinned/contig                       4     786432         34.0        23.15
+d2h/pinned/contig                      16    3145728        131.5        23.93
+d2h/pinned/contig                      64   12582912        520.4        24.18
+d2h/pinned/kernel                       1     196608         12.8        15.37
+d2h/pinned/kernel                       4     786432         61.9        12.70
+d2h/pinned/kernel                      16    3145728        275.1        11.44
+d2h/pinned/kernel                      64   12582912       1146.7        10.97
+d2h/pinned/memcpy24                     1     196608         93.5         2.10
+d2h/pinned/memcpy24                     4     786432        386.1         2.04
+d2h/pinned/memcpy24                    16    3145728       1658.6         1.90
+d2h/pinned/memcpy24                    64   12582912       6427.9         1.96
+d2h/registered/contig                   1     196608         11.2        17.54
+d2h/registered/contig                   4     786432         39.3        20.00
+d2h/registered/contig                  16    3145728        153.9        20.44
+d2h/registered/contig                  64   12582912        570.7        22.05
+d2h/registered/kernel                   1     196608         SKIP            -
+d2h/registered/kernel                   4     786432         SKIP            -
+d2h/registered/kernel                  16    3145728         SKIP            -
+d2h/registered/kernel                  64   12582912         SKIP            -
+d2h/pageable/contig                     1     196608         43.7         4.50
+d2h/pageable/contig                     4     786432        110.6         7.11
+d2h/pageable/contig                    16    3145728        333.1         9.44
+d2h/pageable/contig                    64   12582912       1065.5        11.81
+d2h/pageable/kernel                     1     196608         SKIP            -
+d2h/pageable/kernel                     4     786432         SKIP            -
+d2h/pageable/kernel                    16    3145728         SKIP            -
+d2h/pageable/kernel                    64   12582912         SKIP            -
+d2h/pageable/memcpy24                   1     196608        539.0         0.36
+d2h/pageable/memcpy24                   4     786432       2144.8         0.37
+d2h/pageable/memcpy24                  16    3145728      10080.7         0.31
+d2h/pageable/memcpy24                  64   12582912      41446.5         0.30
+
+== Per-task fixed overhead (least squares on pinned/kernel SYNC rows; intercept = 0-byte task) ==
+dir      intercept_us    marginal_GB/s
+h2d              36.4            20.71
+d2h              12.5            10.88
+measured empty task (event record + sync only): p50 18.2 us
+
+== Micro costs (p50 us) ==
+empty_event_task                               21.1
+noop_kernel_task                               27.3
+memcpy_async_8k_submit_only                   4.660
+kernel_launch_submit_only                     4.987
+
+all verifications passed
+
+# nvidia-smi after
+clocks.current.sm [MHz], clocks.current.memory [MHz], power.draw [W], temperature.gpu
+465 MHz, 810 MHz, 19.85 W, 30
