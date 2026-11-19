@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <numeric>
@@ -35,6 +36,7 @@
 #include "stratakv/common/types.h"
 #include "stratakv/control/task_engine.h"
 #include "stratakv/data/cpu_tier.h"
+#include "stratakv/data/ipc_transport.h"
 #include "stratakv/data/registry.h"
 #include "stratakv/data/tier_table.h"
 #include "stratakv/data/transport.h"
@@ -60,6 +62,7 @@ using stratakv::data::DeviceMemoryRegistry;
 using stratakv::data::GroupDescriptor;
 using stratakv::data::GroupLayout;
 using stratakv::data::HostBacking;
+using stratakv::data::IpcTransportClient;
 using stratakv::data::IsolationMode;
 using stratakv::data::TierTable;
 using stratakv::data::TransferScheduler;
@@ -137,7 +140,8 @@ std::vector<TokenId> Tokens(std::uint32_t blocks, std::uint64_t salt) {
 /// \brief The full stack under test.
 class Stack {
  public:
-  Stack() : layout_(BenchLayout()) {
+  explicit Stack(bool isolated = false) : layout_(BenchLayout()) {
+    isolated_ = isolated;
     LayerGroup full;
     full.name = "full_attn";
     full.spec = FullAttnSpec{2, 64};
@@ -157,7 +161,9 @@ class Stack {
     tier_config.blocks_per_group = kPoolBlocks;
     tier_config.state_objects_per_group = 8;
     tier_config.backing = HostBacking::kPinned;  // Kernel path (F4).
-    tier_ = std::make_unique<CpuTier>(layout_, tier_config);
+    if (!isolated) {
+      tier_ = std::make_unique<CpuTier>(layout_, tier_config);
+    }
 
     for (std::uint32_t l = 0; l < kLayers; ++l) {
       void* buffer = nullptr;
@@ -179,16 +185,28 @@ class Stack {
       view.size_bytes = kGpuSlots * kPerLayer;
       descriptor.per_layer.push_back(view);
     }
-    const auto registration = registry_.RegisterGroup(std::move(descriptor));
 
-    TierTable table;
-    table.AddCpuTier(0, layout_, *tier_);
-    table.AddGpuTier(1, registry_, registration, layout_, kGpuSlots);
-
-    auto transport = std::make_unique<CudaStreamTransport>(std::move(table));
-    scheduler_ = std::make_shared<TransferScheduler>(
-        std::move(transport), IsolationMode::kInProcess,
-        TransferScheduler::Config());
+    if (isolated) {
+      // ADR 0002 isolated mode: the worker owns the CPU tier bytes and
+      // the transport; this process registers its GPU buffers via IPC.
+      auto client = std::make_unique<IpcTransportClient>(layout_,
+                                                         tier_config);
+      client->RegisterGpuGroup(descriptor, kGpuSlots);
+      scheduler_ = std::make_shared<TransferScheduler>(
+          std::move(client), IsolationMode::kIsolatedProcess,
+          TransferScheduler::Config());
+    } else {
+      const auto registration =
+          registry_.RegisterGroup(std::move(descriptor));
+      TierTable table;
+      table.AddCpuTier(0, layout_, *tier_);
+      table.AddGpuTier(1, registry_, registration, layout_, kGpuSlots);
+      auto transport =
+          std::make_unique<CudaStreamTransport>(std::move(table));
+      scheduler_ = std::make_shared<TransferScheduler>(
+          std::move(transport), IsolationMode::kInProcess,
+          TransferScheduler::Config());
+    }
     engine_ = std::make_unique<TaskEngine>(
         plane_.get(), std::make_shared<TransportExecutor>(scheduler_));
   }
@@ -203,6 +221,7 @@ class Stack {
 
   MetadataPlane& plane() { return *plane_; }
   CpuTier& tier() { return *tier_; }
+  bool isolated() const { return isolated_; }
   TaskEngine& engine() { return *engine_; }
   TransferScheduler& scheduler() { return *scheduler_; }
 
@@ -241,7 +260,9 @@ class Stack {
   }
 
  private:
-  stratakv::common::ModelLayout layout_;  std::unique_ptr<MetadataPlane> plane_;
+  stratakv::common::ModelLayout layout_;
+  bool isolated_ = false;
+  std::unique_ptr<MetadataPlane> plane_;
   std::unique_ptr<CpuTier> tier_;
   std::vector<void*> gpu_layers_;
   DeviceMemoryRegistry registry_;
@@ -263,12 +284,27 @@ std::uint64_t HashSpan(const std::vector<std::uint64_t>& words,
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+#ifdef STRATAKV_TEST_WORKER
+  // Bench binaries live in a different dir than the worker.
+  setenv("STRATAKV_TRANSFER_WORKER", STRATAKV_TEST_WORKER, 0);
+#endif
+  bool isolated = false;
+  if (argc == 3 && std::strcmp(argv[1], "--mode") == 0) {
+    if (std::strcmp(argv[2], "isolated") == 0) {
+      isolated = true;
+    } else if (std::strcmp(argv[2], "in-process") != 0) {
+      std::fprintf(stderr, "usage: %s [--mode in-process|isolated]\n",
+                   argv[0]);
+      return 2;
+    }
+  }
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices <= 0) {
     std::fprintf(stderr, "no CUDA device\n");
     return 1;
-  }  cudaDeviceProp prop{};
+  }
+  cudaDeviceProp prop{};
   cudaGetDeviceProperties(&prop, 0);
   int driver = 0, runtime = 0;
   cudaDriverGetVersion(&driver);
@@ -278,11 +314,12 @@ int main() {
               prop.name, prop.major, prop.minor, driver / 1000, driver % 1000,
               runtime / 1000, runtime % 1000);
   std::printf("block geometry: %u layers x %llu B = %llu B | pinned CPU tier "
-              "(kernel path) | in-process mode\n\n",
+              "(kernel path) | %s mode\n\n",
               kLayers, static_cast<unsigned long long>(kPerLayer),
-              static_cast<unsigned long long>(kSlotBytes));
+              static_cast<unsigned long long>(kSlotBytes),
+              isolated ? "isolated-process" : "in-process");
 
-  Stack stack;
+  Stack stack(isolated);
   const std::vector<std::uint32_t> sizes = {1, 4, 16, 64};
 
   // Golden pattern + hashes for one block payload (reused per size).
@@ -310,9 +347,12 @@ int main() {
   std::uint32_t salt = 1000;
   for (std::uint32_t n : sizes) {
     stack.SeedGpu(0, n, golden);
-    // Byte verification through the stack before timing.
+    // Byte verification through the stack before timing. In-process:
+    // hash the CPU pool directly. Isolated: the CPU bytes live in the
+    // worker — verify by loading back into GPU slots [256, 256+n).
     {
-      const auto plan = stack.plane().StagePut(Tokens(n, salt));
+      const auto tokens = Tokens(n, salt);
+      const auto plan = stack.plane().StagePut(tokens);
       std::vector<BlockId> src(n);
       std::iota(src.begin(), src.end(), BlockId{0});
       const TaskHandle put = stack.engine().SubmitPut(plan, src);
@@ -322,11 +362,31 @@ int main() {
         return 1;
       }
       bool ok = true;
-      for (std::uint32_t b = 0; b < n; ++b) {
-        ok = ok && XXH3_64bits(stack.tier().BlockAddress(
-                                     0, plan.blocks_to_store[b].block),
-                               kSlotBytes) ==
-                       HashSpan(golden, 0, kSlotBytes);
+      if (stack.isolated()) {
+        const auto match = stack.plane().MatchForGet(tokens);
+        std::vector<BlockId> back(n);
+        for (std::uint32_t b = 0; b < n; ++b) {
+          back[b] = 256 + b;
+        }
+        const TaskHandle get = stack.engine().SubmitGet(match, back);
+        stack.scheduler().Flush();
+        if (WaitFor(stack.engine(), get) != TaskState::kSucceeded) {
+          std::fprintf(stderr, "verify get-back failed\n");
+          return 1;
+        }
+        const auto gather = stack.GatherGpu(256, n);
+        for (std::uint32_t b = 0; b < n; ++b) {
+          ok = ok && HashSpan(gather,
+                              static_cast<std::size_t>(b) * kSlotBytes / 8,
+                              kSlotBytes) == HashSpan(golden, 0, kSlotBytes);
+        }
+      } else {
+        for (std::uint32_t b = 0; b < n; ++b) {
+          ok = ok && XXH3_64bits(stack.tier().BlockAddress(
+                                       0, plan.blocks_to_store[b].block),
+                                 kSlotBytes) ==
+                         HashSpan(golden, 0, kSlotBytes);
+        }
       }
       if (!ok) {
         std::fprintf(stderr, "PUT bytes corrupt (n=%u)\n", n);

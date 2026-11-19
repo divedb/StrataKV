@@ -132,6 +132,28 @@ WSL2-specific (native Linux runs registered+kernel scenarios fine;
 pageable+SM faults everywhere). The 3080 Ti's lower intercepts make it
 the better E4/isolation-mode substrate — as the roadmap assumed.
 
+## E4 isolation experiment (gate G2 — both modes, same session)
+
+`stratakv_gpu_transport_bench --mode {in-process,isolated}` drives the
+same workload through `CudaStreamTransport` or the isolated stack
+(`IpcTransportClient` + `stratakv_transfer_worker` process: worker owns
+the CPU tier bytes + transport, opens engine GPU buffers via CUDA IPC
+handles). Log:
+`results/2026-11-19_remote_rtx3080ti/e4_isolation_experiment.log`.
+
+| metric (RTX 3080 Ti, sync p50) | in-process | isolated | premium |
+| --- | --- | --- | --- |
+| 4-block put / get | 147.9 / 155.7 µs | 195.6 / 207.3 µs | ~+50 µs |
+| 0-byte intercept put / get | 107.6 / 108.6 µs | 146.0 / 150.0 µs | ~+40 µs |
+| 64-block put | 1229 µs | 1357 µs | +10% |
+| marginal bandwidth | ~11.3 GB/s | ~10.4 GB/s | ~-7% |
+
+Both modes pass the ≤ 1 ms bar 5× under; fault injection (worker
+SIGKILL mid-batch) leaves the engine alive with clean failures —
+ADR 0002 is final: **isolated-process stays the default**, in-process
+stays selectable. The premium is ~200× smaller than FlexKV v1.0.0's
+per-task isolation overhead (10.85–21.04 ms, E0).
+
 ## Phase A3 harness — not yet ported
 
 The reproducible end-to-end benchmark harness currently lives with the

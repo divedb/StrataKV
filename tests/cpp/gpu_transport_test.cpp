@@ -13,12 +13,17 @@
 
 #include <cuda_runtime.h>
 
+#include <signal.h>
+#include <unistd.h>
+
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <numeric>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "xxhash.h"
@@ -28,6 +33,7 @@
 #include "stratakv/common/types.h"
 #include "stratakv/control/task_engine.h"
 #include "stratakv/data/cpu_tier.h"
+#include "stratakv/data/ipc_transport.h"
 #include "stratakv/data/registry.h"
 #include "stratakv/data/tier_table.h"
 #include "stratakv/data/transport.h"
@@ -55,6 +61,7 @@ using stratakv::data::DeviceMemoryRegistry;
 using stratakv::data::GroupDescriptor;
 using stratakv::data::GroupLayout;
 using stratakv::data::HostBacking;
+using stratakv::data::IpcTransportClient;
 using stratakv::data::IsolationMode;
 using stratakv::data::TierTable;
 using stratakv::data::TransferScheduler;
@@ -143,6 +150,9 @@ class GpuGroupBuffers {
   std::vector<void*> buffers_;
 };
 
+constexpr std::uint64_t kPerLayer = 8192;  // BlockBytes / 24 layers.
+constexpr std::uint64_t kSlotBytes = 24 * kPerLayer;
+
 std::uint64_t HashBytes(const void* data, std::uint64_t bytes) {
   return XXH3_64bits(data, static_cast<std::size_t>(bytes));
 }
@@ -188,8 +198,6 @@ void BlockRoundTrip(HostBacking backing) {
   const ModelLayout layout = Qwen2Shaped();
   constexpr std::uint32_t kCapacity = 64;
   constexpr std::uint32_t kTpb = 16;
-  constexpr std::uint64_t kPerLayer = 8192;  // BlockBytes / 24 layers.
-  constexpr std::uint64_t kSlotBytes = 24 * kPerLayer;
 
   MetadataPlaneConfig plane_config;
   plane_config.blocks_per_group = kCapacity;
@@ -460,8 +468,7 @@ TEST(GpuIpcTest, ExportSucceedsOrFailsLoudly) {
   (void)cudaFree(device_buffer);
 }
 
-TEST(GpuTransportTest, UnknownTierFailsLoudly) {
-  if (!GpuAvailable()) GTEST_SKIP() << "no CUDA device";
+TEST(GpuTransportTest, UnknownTierFailsLoudly) {  if (!GpuAvailable()) GTEST_SKIP() << "no CUDA device";
   const ModelLayout layout = Qwen2Shaped();
   MetadataPlaneConfig plane_config;
   plane_config.blocks_per_group = 16;
@@ -487,6 +494,211 @@ TEST(GpuTransportTest, UnknownTierFailsLoudly) {
   // the graph into the transport's Enqueue.
   EXPECT_THROW(scheduler->Flush(), stratakv::LogicError);
 
+  engine.Shutdown(std::chrono::milliseconds(1000));
+  scheduler->Shutdown(std::chrono::milliseconds(1000));
+}
+
+// ---- Isolated-process mode (E4, ADR 0002) ----
+// The engine process keeps metadata + GPU buffers; the worker owns
+// the CPU tier bytes and the transport (GPU access via IPC handles).
+// Skips on platforms without cross-process CUDA IPC (WSL2).
+
+/// \brief Engine-side isolated stack bootstrap; nullptr + `skip`
+/// message when this platform cannot do cross-process CUDA IPC.
+std::unique_ptr<IpcTransportClient> TryMakeIsolatedClient(
+    const ModelLayout& layout, std::uint32_t blocks_per_group,
+    const GroupDescriptor& descriptor, std::uint32_t capacity,
+    std::string* skip) {
+#ifdef STRATAKV_TEST_WORKER
+  // Test binaries live in a different dir than the worker.
+  setenv("STRATAKV_TRANSFER_WORKER", STRATAKV_TEST_WORKER, /*overwrite=*/1);
+#endif
+  CpuTierConfig tier_config;
+  tier_config.blocks_per_group = blocks_per_group;
+  tier_config.state_objects_per_group = 8;
+  tier_config.backing = HostBacking::kPinned;
+  auto client = std::make_unique<IpcTransportClient>(layout, tier_config);
+  try {
+    client->RegisterGpuGroup(descriptor, capacity);
+  } catch (const stratakv::LogicError& e) {
+    if (IpcTransportClient::IsIpcUnsupported(e.what())) {
+      *skip = e.what();
+      return nullptr;
+    }
+    throw;
+  }
+  return client;
+}
+
+TEST(GpuIsolatedTest, BlockRoundTripThroughWorkerProcess) {
+  if (!GpuAvailable()) GTEST_SKIP() << "no CUDA device";
+  const ModelLayout layout = Qwen2Shaped();
+  constexpr std::uint32_t kCapacity = 64;
+  MetadataPlaneConfig plane_config;
+  plane_config.blocks_per_group = kCapacity;
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      plane_config);
+
+  GpuGroupBuffers gpu(24, kCapacity * kPerLayer);
+  GroupDescriptor descriptor;
+  descriptor.group_name = "full_attn";
+  descriptor.group = 0;
+  descriptor.layout = GroupLayout::kLayerwise;
+  descriptor.device_id = 0;
+  for (std::size_t l = 0; l < 24; ++l) {
+    BufferView view;
+    view.base = gpu.layer(l);
+    view.kind = DeviceKind::kGpu;
+    view.device_id = 0;
+    view.size_bytes = kCapacity * kPerLayer;
+    descriptor.per_layer.push_back(view);
+  }
+  std::string skip_reason;
+  auto client = TryMakeIsolatedClient(layout, kCapacity, descriptor,
+                                      kCapacity, &skip_reason);
+  if (client == nullptr) {
+    GTEST_SKIP() << "cross-process CUDA IPC unsupported here: "
+                 << skip_reason;
+  }
+  auto scheduler = std::make_shared<TransferScheduler>(
+      std::move(client), IsolationMode::kIsolatedProcess,
+      TransferScheduler::Config());
+  TaskEngine engine(&plane, std::make_shared<TransportExecutor>(scheduler));
+
+  // Golden pattern into GPU slots 0..3.
+  std::vector<std::uint64_t> golden(kSlotBytes / 8);
+  std::uint64_t rng = 0x1501D;
+  for (auto& word : golden) {
+    rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+    word = rng;
+  }
+  for (std::uint32_t b = 0; b < 4; ++b) {
+    for (std::size_t l = 0; l < 24; ++l) {
+      CUDA_TEST_CHECK(cudaMemcpy(
+          static_cast<char*>(gpu.layer(l)) + b * kPerLayer,
+          reinterpret_cast<const char*>(golden.data()) + l * kPerLayer,
+          kPerLayer, cudaMemcpyHostToDevice));
+    }
+  }
+
+  // Put through the worker; verify by loading back into GPU slots
+  // 20..23 (the CPU bytes live in the worker — round-trip proves them).
+  const std::vector<TokenId> tokens(64, TokenId{7});
+  const auto plan = plane.StagePut(tokens);
+  const std::vector<BlockId> src = {0, 1, 2, 3};
+  const TaskHandle put = engine.SubmitPut(plan, src);
+  ASSERT_EQ(engine.Wait(std::span<const TaskHandle>(&put, 1),
+                        std::chrono::milliseconds(10000))
+                .items.at(0)
+                .state,
+            TaskState::kSucceeded);
+  const auto match = plane.MatchForGet(tokens);
+  ASSERT_EQ(match.matched_blocks, 4u);
+  std::vector<BlockId> dst = {20, 21, 22, 23};
+  const TaskHandle get = engine.SubmitGet(match, dst);
+  ASSERT_EQ(engine.Wait(std::span<const TaskHandle>(&get, 1),
+                        std::chrono::milliseconds(10000))
+                .items.at(0)
+                .state,
+            TaskState::kSucceeded);
+  std::vector<std::uint64_t> gather(kSlotBytes / 8);
+  for (std::uint32_t b = 0; b < 4; ++b) {
+    for (std::size_t l = 0; l < 24; ++l) {
+      CUDA_TEST_CHECK(cudaMemcpy(
+          reinterpret_cast<char*>(gather.data()) + l * kPerLayer,
+          static_cast<const char*>(gpu.layer(l)) +
+              static_cast<std::uint64_t>(20 + b) * kPerLayer,
+          kPerLayer, cudaMemcpyDeviceToHost));
+    }
+    ASSERT_EQ(HashBytes(gather.data(), kSlotBytes),
+              HashBytes(golden.data(), kSlotBytes))
+        << "block " << b << " corrupted through the worker round trip";
+  }
+  engine.Shutdown(std::chrono::milliseconds(2000));
+  scheduler->Shutdown(std::chrono::milliseconds(2000));
+}
+
+TEST(GpuIsolatedTest, WorkerKillFailsOpsButEngineSurvives) {
+  if (!GpuAvailable()) GTEST_SKIP() << "no CUDA device";
+  const ModelLayout layout = Qwen2Shaped();
+  constexpr std::uint32_t kCapacity = 64;
+  constexpr std::uint32_t kPool = 8 * kCapacity;  // The whole batch
+  // stages 8 x 64 blocks before anything completes.
+  MetadataPlaneConfig plane_config;
+  plane_config.blocks_per_group = kPool;
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      plane_config);
+  GpuGroupBuffers gpu(24, kCapacity * kPerLayer);
+  GroupDescriptor descriptor;
+  descriptor.group_name = "full_attn";
+  descriptor.group = 0;
+  descriptor.layout = GroupLayout::kLayerwise;
+  descriptor.device_id = 0;
+  for (std::size_t l = 0; l < 24; ++l) {
+    BufferView view;
+    view.base = gpu.layer(l);
+    view.kind = DeviceKind::kGpu;
+    view.device_id = 0;
+    view.size_bytes = kCapacity * kPerLayer;
+    descriptor.per_layer.push_back(view);
+  }
+  std::string skip_reason;
+  auto client = TryMakeIsolatedClient(layout, kCapacity, descriptor,
+                                      kCapacity, &skip_reason);
+  if (client == nullptr) {
+    GTEST_SKIP() << "cross-process CUDA IPC unsupported here: "
+                 << skip_reason;
+  }
+  const pid_t worker_pid = client->worker_pid();
+  auto scheduler = std::make_shared<TransferScheduler>(
+      std::move(client), IsolationMode::kIsolatedProcess,
+      TransferScheduler::Config());
+  TaskEngine engine(&plane, std::make_shared<TransportExecutor>(scheduler));
+
+  // A batch big enough to still be in flight when the worker dies
+  // (8 x 64 blocks = ~100 MB through a ~12 GB/s link).
+  std::vector<TaskHandle> puts;
+  std::vector<MetadataPlane::PutPlan> plans;  // Kept for post-failure
+  // aborts (the engine contract: failed puts stay staged for the
+  // caller to abort; their reservations must return to the pool).
+  std::vector<BlockId> big_src(64);
+  std::iota(big_src.begin(), big_src.end(), BlockId{0});
+  for (int task = 0; task < 8; ++task) {
+    plans.push_back(plane.StagePut(
+        std::vector<TokenId>(1024, TokenId{100 + task})));
+    puts.push_back(engine.SubmitPut(plans.back(), big_src));
+  }
+  scheduler->Flush();
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ASSERT_EQ(kill(worker_pid, SIGKILL), 0);
+
+  // Every task must reach a terminal state (failures, not a hang).
+  const auto result = engine.Wait(puts, std::chrono::milliseconds(5000));
+  ASSERT_EQ(result.items.size(), puts.size());
+  std::size_t failed = 0;
+  for (const auto& item : result.items) {
+    EXPECT_TRUE(item.state == TaskState::kFailed ||
+                item.state == TaskState::kSucceeded);
+    if (item.state == TaskState::kFailed) {
+      ++failed;
+    }
+  }
+  EXPECT_GT(failed, static_cast<std::size_t>(0));
+
+  // The engine survives: metadata still works, the failed tasks'
+  // reservations are recoverable (the documented abort path), a new
+  // submission fails fast and loudly (inline op failure, no hang),
+  // shutdown is clean.
+  for (const auto& staged : plans) {
+    if (staged.entry != nullptr) {
+      (void)plane.AbortPut(staged.entry);
+    }
+  }
+  const auto plan = plane.StagePut(std::vector<TokenId>(16, TokenId{9}));
+  const TaskHandle doomed = engine.SubmitPut(plan, std::vector<BlockId>{0});  const auto quick = engine.Wait(std::span<const TaskHandle>(&doomed, 1),
+                                 std::chrono::milliseconds(2000));
+  EXPECT_EQ(quick.items.at(0).state, TaskState::kFailed);
+  EXPECT_EQ(engine.num_in_flight(), 0u);
   engine.Shutdown(std::chrono::milliseconds(1000));
   scheduler->Shutdown(std::chrono::milliseconds(1000));
 }

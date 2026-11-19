@@ -1,0 +1,90 @@
+# StrataKV E4 isolation experiment — remote E0 host (RTX 3080 Ti)
+date: 2026-11-19T14:39:55Z
+os: 5.4.0-162-generic | CUDA 12.8 | driver 580.76.05
+same harness, both ADR 0002 modes, same session
+
+=========== MODE: in-process ===========
+== StrataKV full-stack transport bench ==
+device: NVIDIA GeForce RTX 3080 Ti (cc 8.6) | driver 13.0 | runtime 12.80
+block geometry: 24 layers x 8192 B = 196608 B | pinned CPU tier (kernel path) | in-process mode
+
+== SYNC mode: SubmitPut -> Wait per task ==
+task   blocks      bytes     p50_us     p95_us     p99_us     GB/s
+put         1     196608      154.5      170.7      176.6     1.27
+put         4     786432      147.9      166.5      172.9     5.32
+put        16    3145728      386.0      403.9      418.3     8.15
+put        64   12582912     1229.1     1262.0     1271.7    10.24
+get         1          -        1.2        1.2        1.2 (match only)
+get         4          -        2.0        2.0        2.1 (match only)
+get        16          -        4.6        4.6        4.7 (match only)
+get        64          -       14.9       15.2       22.5 (match only)
+get         1     196608      149.6      168.0      174.2     1.31
+get         4     786432      155.7      164.9      177.4     5.05
+get        16    3145728      380.9      390.2      396.7     8.26
+get        64   12582912     1214.6     1260.8     1269.4    10.36
+
+== PIPELINED mode (K=8 tasks, one flush + Wait; drain-and-batch shape) ==
+task   blocks  p50_us/task         GB/s
+put         1         41.4         4.75
+get         1         30.6         6.42
+put         4         84.3         9.33
+get         4         80.0         9.84
+put        16        285.4        11.02
+get        16        275.8        11.41
+put        64       1102.0        11.42
+get        64       1066.0        11.80
+
+== Per-task fixed overhead (0-byte intercept, sync p50) ==
+task     intercept_us    marginal_GB/s
+put             107.6            11.24
+get             108.6            11.40
+
+== References ==
+acceptance bar (roadmap E): per-task fixed overhead <= 1000 us at 4 blocks
+measured 4-block p50: put 147.9 us | get 155.7 us -> PASS (bar 1000 us)
+Phase 0 raw kernel floor (same box): h2d 74.9 / d2h 82.9 us at 4 blocks
+FlexKV v1.0.0 per-task (E0, remote 3080 Ti): 10850-21040 us at ~4 blocks
+verifications passed
+
+=========== MODE: isolated-process ===========
+== StrataKV full-stack transport bench ==
+device: NVIDIA GeForce RTX 3080 Ti (cc 8.6) | driver 13.0 | runtime 12.80
+block geometry: 24 layers x 8192 B = 196608 B | pinned CPU tier (kernel path) | isolated-process mode
+
+== SYNC mode: SubmitPut -> Wait per task ==
+task   blocks      bytes     p50_us     p95_us     p99_us     GB/s
+put         1     196608      202.3      229.6      250.7     0.97
+put         4     786432      195.6      206.1      220.1     4.02
+put        16    3145728      430.6      440.4      447.8     7.30
+put        64   12582912     1357.0     1401.2     1409.6     9.27
+get         1          -        1.2        1.2        1.8 (match only)
+get         4          -        2.0        2.0        2.1 (match only)
+get        16          -        4.6        4.6        4.7 (match only)
+get        64          -       14.9       15.0       15.7 (match only)
+get         1     196608      204.8      213.2      221.3     0.96
+get         4     786432      207.3      215.9      223.9     3.79
+get        16    3145728      430.1      437.3      442.3     7.31
+get        64   12582912     1371.4     1408.9     1428.6     9.18
+
+== PIPELINED mode (K=8 tasks, one flush + Wait; drain-and-batch shape) ==
+task   blocks  p50_us/task         GB/s
+put         1         53.3         3.69
+get         1         42.0         4.68
+put         4         90.4         8.70
+get         4         92.9         8.46
+put        16        297.4        10.58
+get        16        286.5        10.98
+put        64       1111.5        11.32
+get        64       1070.5        11.75
+
+== Per-task fixed overhead (0-byte intercept, sync p50) ==
+task     intercept_us    marginal_GB/s
+put             146.0            10.44
+get             150.0            10.36
+
+== References ==
+acceptance bar (roadmap E): per-task fixed overhead <= 1000 us at 4 blocks
+measured 4-block p50: put 195.6 us | get 207.3 us -> PASS (bar 1000 us)
+Phase 0 raw kernel floor (same box): h2d 74.9 / d2h 82.9 us at 4 blocks
+FlexKV v1.0.0 per-task (E0, remote 3080 Ti): 10850-21040 us at ~4 blocks
+verifications passed

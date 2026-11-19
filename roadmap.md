@@ -163,71 +163,32 @@ UBSan; CI gains a Python job.)
 
 ### Phase E — Data plane (registration, CPU tier, transfer engine)
 
-**Status: ◐ GPU portion implemented 2026-11-19 on E-Local** (the
-offline portion landed earlier the same day — `DeviceMemoryRegistry`
-with ADR 0005 lifetime semantics, `CpuTier` byte ownership,
+**Status: ✅ complete 2026-11-19 — gate G2 passed (ADR 0002 final)** (the
+offline portion landed 2026-11-19 morning — `DeviceMemoryRegistry` with
+ADR 0005 lifetime semantics, `CpuTier` byte ownership,
 `TransferScheduler` drain-and-batch with fake-transport wiring. The
-local GPU then enabled the deferred items: E1's real
-`CudaIpcHandleSource` (`cudaIpcGetMemHandle` behind the seam; export
-verified working on WSL2 — cross-process open/attach still unverified,
-queued with E4); E2's page-locked backings (`cudaMallocHost` pools —
-the SM-safe kind per Phase 0 F4 — plus `cudaHostRegister`, plus a
-loud-failure path in CPU-only builds) and the block-granularity fix
-(one block id = model-wide slot, per-layer slice × layers — the FlexKV
-physical-block contract, Appendix B; CpuTier and plane accounting
-aligned); E3's `CudaStreamTransport`: TierTable id→buffer geometry,
-one strided-kernel launch per op on SM-safe memory (copy-engine
-fallback otherwise, per F2/F4), scratch-arena op-parameter upload,
-stream pool, CUDA-event completion from one worker thread —
-byte-verified end to end through TaskEngine (put/get block round trips
-+ hybrid state snapshot/restore; 6 GPU tests). API completion:
-SubmitGet/SubmitPut gained `gpu_state_slots` (state ops previously had
-no GPU-side addressing). Also fixed: a TaskEngine race where Wait could
-observe a terminal state before CommitPut/Release side effects ran
-(found by the transport bench's put-evict loop; effects now applied
-atomically under the engine mutex), and non-PIC static libs breaking
-Linux STRATAKV_PYTHON builds. **Acceptance: per-task fixed overhead ≤
-1 ms at 4-block payloads — PASS in in-process mode** (put 184.8 µs /
-get 194.6 µs sync p50; full-stack 0-byte intercept 135.6/163.6 µs vs
-the ~22–32 µs raw floor; log:
-`benchmarks/results/2026-11-19_wsl2_rtx4080super/gpu_transport_bench.log`).
-Remaining for E4 (gate G2): the isolated-process mode experiment and
-cross-process IPC verification. **Unblocked 2026-11-19**: the E0 remote
-host is live again (rsync workflow, local repo as source of truth) —
-the in-tree IPC probe (`benchmarks/ipc_probe.cu`) verified cross-
-process CUDA IPC end to end there, and the remote runs the full stack
-FASTER than E-Local despite its half-bandwidth link (4-block put
-147.3/get 152.4 µs; native CUDA fixed costs ~4× lower than WSL2's —
-see the environment comparison in `benchmarks/README.md`). A 2026-11-19
-two-way probe on E-Local settled its platform question the other way:
-CUDA IPC *export* works on WSL2 but cross-process *open* fails — the
-isolated mode cannot be built or tested there (ADR 0002 notes). E4 =
-implement isolated-process mode on the remote + measure both modes +
-fault injection + finalize ADR 0002 at gate G2.)
-
-**Python facade on the real data plane (2026-11-19, same day):**
-`EngineConfig.use_gpu_transport=True` (STRATAKV_PYTHON+STRATAKV_GPU
-builds) wires the full stack behind the facade —
-`register_gpu_group` (raw `(address, bytes)` descriptors per ADR 0005;
-torch stays at the adapter), `start()` (CpuTier + TierTable +
-CudaStreamTransport; match/stage work pre-start, submissions fail
-loudly until started), plus `evict_blocks` and debug device helpers
-(tests/standalone only; their presence marks the GPU build).
-Launch-point fix found by the facade work: submitted tasks previously
-sat in the scheduler's batch queue until an explicit scheduler-side
-Flush — `ITaskExecutor::Flush()` now fires at the top of every
-Wait/TryWait (the per-step launch cadence of design.md diagram 2; the
-drain-and-batch harvest: N submits per step, one flush per step).
-Binding wart fixed: failed submits no longer consume the match/plan
-id (staged entries stay abortable). Measured through the facade
-(`gpu_transport_py_bench`, log alongside the C++ one): 4-block sync
-p50 put 200.4 / get 221.4 µs — the pybind+facade layer costs ~16–27 µs
-over the C++ stack; acceptance bar PASS from Python. Match through
-the facade: 2.8 µs @1 block, 42.4 µs @64 (token-list conversion
-dominates at scale — numpy input noted for F1). Python suite: 14
-tests green incl. byte-verified round trips, the pre-start contract,
-and a GIL-heartbeat against REAL async completion (ADR 0004 evidence
-the InlineExecutor suite could not provide).
+local GPU then enabled the GPU portion: real `CudaIpcHandleSource`,
+page-locked tier backings (`cudaMallocHost`/`cudaHostRegister`/pageable
+with loud CPU-build failures) and the model-wide block-slot fix;
+`CudaStreamTransport` (TierTable id→buffer geometry, one strided-kernel
+launch per op on SM-safe memory with copy-engine fallback per F2/F4,
+scratch-arena parameter upload, stream pool, single-worker event
+completion); `SubmitGet`/SubmitPut` gained `gpu_state_slots` (state ops
+previously lacked GPU-side addressing); the Python facade drives the
+real stack (`use_gpu_transport`, `register_gpu_group`, `start()`), and
+`ITaskExecutor::Flush()` became the per-step launch point (diagram 2
+cadence). **E4 isolation experiment (both modes on the E0 remote
+host, `e4_isolation_experiment.log`): 4-block put/get p50 147.9/155.7 µs
+in-process vs 195.6/207.3 µs isolated — the isolation premium is
+~50 µs/task; both pass the ≤ 1 ms acceptance bar 5× under; fault
+injection (worker SIGKILL mid-batch) leaves the engine alive with
+clean task failures and recoverable reservations. ADR 0002 final:
+isolated-process stays the default, in-process stays selectable.**
+Found and fixed along the way: a TaskEngine race (terminal state
+visible before CommitPut/Release effects — shredded entries
+nondeterministically; effects now atomic under the engine mutex),
+non-PIC static libs breaking Linux Python builds, and CMake 3.22/CUDA
+12 portability (documented in `docs/toolchains.md`).)
 
 **Goal:** GPU registration + tier transfers, benchmarked in both isolation modes per ADR 0002.
 
@@ -271,7 +232,7 @@ the InlineExecutor suite could not provide).
 | M1 | A1–A4: baseline ladder closed | **G1** adopt-vs-build decision |
 | M2 ✅ | B complete: skeleton + object model + CI | build/test green |
 | M3 ✅ | C+D complete: metadata + control plane, CPU-only | index parity + engine stress pass |
-| M4 | E1–E4: data plane + isolation experiment | **G2** isolation decision with numbers |
+| M4 ✅ | E1–E4: data plane + isolation experiment | **G2** isolation decision with numbers (ADR 0002 final: isolated default, +~50 µs/task premium, fault containment proven) |
 | M5 | F1–F2: vLLM parity on full attention | byte-exact reload, workload parity |
 | M6 | F3–F4 + G: hybrid + hardening | v0.1.0 |
 

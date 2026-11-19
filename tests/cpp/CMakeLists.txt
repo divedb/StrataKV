@@ -57,6 +57,10 @@ if (STRATAKV_GPU AND EXISTS "${PROJECT_SOURCE_DIR}/third_party/googletest/CMakeL
   stratakv_target_defaults(stratakv_gpu_tests)
   target_compile_features(stratakv_gpu_tests PRIVATE cxx_std_20)
   target_compile_options(stratakv_gpu_tests PRIVATE -Wall -Wextra -Wshadow -Wunused)
+  # The isolated-mode tests spawn the worker (E4); test binaries live
+  # in a different build dir than it.
+  target_compile_definitions(stratakv_gpu_tests PRIVATE
+    STRATAKV_TEST_WORKER="${CMAKE_BINARY_DIR}/src/stratakv_transfer_worker")
   target_link_libraries(stratakv_gpu_tests PRIVATE stratakv_core
     stratakv_metadata stratakv_control stratakv_data stratakv::xxhash
     CUDA::cudart gtest gtest_main)

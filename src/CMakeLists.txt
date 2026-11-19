@@ -32,6 +32,8 @@ if (STRATAKV_GPU)
   list(APPEND STRATAKV_DATA_SOURCES
     data/transport_cuda.cu
     data/ipc_cuda.cu
+    data/ipc_transport.cpp
+    data/ipc_protocol.cpp
     data/host_memory_cuda.cpp)
 endif()
 add_library(stratakv_data ${STRATAKV_DATA_SOURCES})
@@ -75,6 +77,17 @@ target_include_directories(stratakv_core
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+
+# Isolated-mode transfer worker (E4, ADR 0002): a separate process the
+# IpcTransportClient spawns; looked up next to the running executable
+# or via $STRATAKV_TRANSFER_WORKER.
+if (STRATAKV_GPU)
+  add_executable(stratakv_transfer_worker data/transfer_worker_main.cpp)
+  stratakv_target_defaults(stratakv_transfer_worker)
+  stratakv_target_warnings(stratakv_transfer_worker)
+  target_link_libraries(stratakv_transfer_worker PRIVATE
+    stratakv::data CUDA::cudart)
+endif()
 
 target_link_libraries(stratakv_metadata
   PUBLIC

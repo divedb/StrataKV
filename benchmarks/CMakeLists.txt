@@ -37,6 +37,9 @@ if(STRATAKV_GPU)
   # same one-off suppression pattern as the metadata TUs.
   set_source_files_properties(gpu_transport_bench.cpp PROPERTIES
     COMPILE_OPTIONS "-Wno-array-bounds")
+  # The isolated-mode bench run spawns the worker (E4).
+  target_compile_definitions(stratakv_gpu_transport_bench PRIVATE
+    STRATAKV_TEST_WORKER="${CMAKE_BINARY_DIR}/src/stratakv_transfer_worker")
   target_link_libraries(stratakv_gpu_transport_bench PRIVATE
     stratakv::control stratakv::data stratakv::xxhash CUDA::cudart)
 
