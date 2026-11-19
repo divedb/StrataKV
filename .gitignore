@@ -10,10 +10,9 @@ __pycache__/
 .venv/
 
 # Cloned third-party sources not yet converted to submodules (fetched by
-# scripts/fetch_third_party.sh). googletest is a real submodule and must
-# NOT be ignored.
+# scripts/fetch_third_party.sh). googletest and xxhash are real submodules
+# and must NOT be ignored.
 third_party/pybind11/
-third_party/xxhash/
 
 # Tooling artifacts
 compile_commands.json

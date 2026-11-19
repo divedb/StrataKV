@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Fetch pinned third-party sources into third_party/.
 #
-# Preferred form is Git submodules pinned to commits; this environment
-# currently has no GitHub network access, so the same pins are expressed
-# as shallow clones at exact release tags. When network is available,
-# convert to `git submodule add` and keep the pins identical.
+# Preferred form is Git submodules pinned to commits. Network egress has
+# since been restored, so googletest and xxhash are real submodules now;
+# pybind11 is still materialized as a shallow clone at its exact release
+# tag (convert to a submodule on next touch, keeping the pin identical).
 #
 # Pins (do not float):
 #   googletest  v1.14.0   (test framework)
@@ -24,11 +24,13 @@ fetch_pinned() {
   git clone --depth 1 --branch "${tag}" "${url}" "${ROOT}/third_party/${dir}"
 }
 
-# googletest is a real Git submodule now; initialize it instead of cloning.
+# Real Git submodules; initialize them instead of cloning.
 if [[ ! -d "${ROOT}/third_party/googletest/.git" ]]; then
   git submodule update --init -- "${ROOT}/third_party/googletest"
 fi
+if [[ ! -d "${ROOT}/third_party/xxhash/.git" ]]; then
+  git submodule update --init -- "${ROOT}/third_party/xxhash"
+fi
 fetch_pinned pybind11   https://github.com/pybind/pybind11.git   v2.13.6
-fetch_pinned xxhash     https://github.com/Cyan4973/xxHash.git   v0.8.2
 
 echo "Done. Reconfigure CMake to pick up the dependencies."

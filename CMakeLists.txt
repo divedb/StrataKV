@@ -18,6 +18,7 @@ option(STRATAKV_GTEST_SHIM
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 include(Sanitizers)
+include(Xxhash)
 
 add_subdirectory(src)
 
