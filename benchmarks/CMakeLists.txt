@@ -23,4 +23,18 @@ if(STRATAKV_GPU)
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall,-Wextra,-Wshadow,-Wunused>)
   target_link_libraries(stratakv_gpu_baseline PRIVATE
     CUDA::cudart stratakv::xxhash)
+
+  # Phase E (E3): full-stack per-task cost through TaskEngine ->
+  # TransferScheduler -> CudaStreamTransport (acceptance-bar evidence).
+  # Plain C++ TU; cudart needed directly (transport_cuda.h includes
+  # <cuda_runtime.h>; stratakv_data's cudart link is PRIVATE).
+  add_executable(stratakv_gpu_transport_bench gpu_transport_bench.cpp)
+  stratakv_target_defaults(stratakv_gpu_transport_bench)
+  stratakv_target_warnings(stratakv_gpu_transport_bench)
+  # gcc-13 false positive in the vendored xxhash.h (XXH_INLINE_ALL);
+  # same one-off suppression pattern as the metadata TUs.
+  set_source_files_properties(gpu_transport_bench.cpp PROPERTIES
+    COMPILE_OPTIONS "-Wno-array-bounds")
+  target_link_libraries(stratakv_gpu_transport_bench PRIVATE
+    stratakv::control stratakv::data stratakv::xxhash CUDA::cudart)
 endif()

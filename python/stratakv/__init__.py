@@ -217,11 +217,13 @@ class Engine:
         return PutPlan(p.plan_id, p.matched_blocks, p.new_blocks, p.feasible)
 
     def submit_put(self, plan: PutPlan,
-                   gpu_blocks: Sequence[int]) -> TaskHandle:
+                   gpu_blocks: Sequence[int],
+                   gpu_state_slots: Sequence[int] = ()) -> TaskHandle:
         """Launch the offload (GIL released)."""
         return TaskHandle(
             self._engine.submit_put(plan.plan_id,
-                                    [int(b) for b in gpu_blocks]))
+                                    [int(b) for b in gpu_blocks],
+                                    [int(s) for s in gpu_state_slots]))
 
     def abort_put(self, plan: PutPlan) -> None:
         """Abort a staged put; recycles its reservation."""
@@ -230,11 +232,13 @@ class Engine:
     # ---- get path ----
 
     def submit_get(self, match: MatchInfo,
-                   gpu_slots: Sequence[int]) -> TaskHandle:
+                   gpu_slots: Sequence[int],
+                   gpu_state_slots: Sequence[int] = ()) -> TaskHandle:
         """Launch the load for a match (GIL released)."""
         return TaskHandle(
             self._engine.submit_get(match.match_id,
-                                    [int(s) for s in gpu_slots]))
+                                    [int(s) for s in gpu_slots],
+                                    [int(s) for s in gpu_state_slots]))
 
     # ---- task state ----
 

@@ -55,6 +55,33 @@ Headline (pinned, 4-block task, SYNC mode): contig 55.5 µs, kernel
 74.9 µs, memcpy24 409.6 µs; per-task fixed overhead ≈ 22–32 µs — vs
 FlexKV v1.0.0's 10–20 ms per task on the same payload class (E0).
 
+## gpu_transport_bench (Phase E3 — full stack, STRATAKV_GPU=ON)
+
+`stratakv_gpu_transport_bench` measures per-task cost through the REAL
+stack — MetadataPlane → TaskEngine → TransferScheduler →
+CudaStreamTransport (pinned CpuTier, LAYERWISE GPU registration,
+in-process mode) — at the Phase 0 geometry. Sync mode is
+Submit→Wait per task (the FlexKV per-task cost definition); pipelined
+mode is K=8 tasks with one flush+wait. Every scenario is XXH3-verified
+before timing. Run like gpu_baseline (same build).
+
+Baseline (WSL2 / RTX 4080 SUPER, 2026-11-19,
+`results/2026-11-19_wsl2_rtx4080super/gpu_transport_bench.log`):
+
+| task (4 blocks = 768 KiB, sync p50) | µs | vs bar 1000 µs | vs FlexKV v1.0.0 |
+| --- | --- | --- | --- |
+| put | 184.8 | PASS (5.4× headroom) | ~59–114× lower |
+| get | 194.6 | PASS (5.1× headroom) | ~56–108× lower |
+
+Full-stack 0-byte intercept: put 135.6 µs / get 163.6 µs (raw CUDA
+floor ≈ 22–32 µs; the delta is scheduler queueing, per-batch scratch
+upload, the 50 µs completion-poll cadence, and engine bookkeeping —
+tuning headroom for later phases). Pipelined (K=8): put ≈ 10 GB/s,
+get ≈ 17.7 GB/s per task at 64 blocks. **Roadmap Phase E acceptance
+(per-task fixed overhead ≤ 1 ms at 4-block payloads): PASS in
+in-process mode** (the E4 isolation experiment still owes the
+isolated-process comparison).
+
 ## Phase A3 harness — not yet ported
 
 The reproducible end-to-end benchmark harness currently lives with the

@@ -82,11 +82,13 @@ def test_hybrid_no_partial_caching():
         EngineConfig(blocks_per_group=64, state_objects_per_group=8))
 
     # Two boundaries: block 2 (first put) and block 4 (its extension).
+    # gpu_state_slots parallel the snapshot sidecars (one per boundary).
     plan1 = engine.stage_put([1, 2, 3, 4])
-    assert engine.try_wait([engine.submit_put(plan1, gpu_blocks=[0, 1])])[0][1] == "succeeded"
+    assert engine.try_wait([engine.submit_put(
+        plan1, gpu_blocks=[0, 1], gpu_state_slots=[0])])[0][1] == "succeeded"
     plan2 = engine.stage_put(TOKENS)  # Extends: 2 matched + 2 new.
     assert plan2.matched_blocks == 2
-    put2 = engine.submit_put(plan2, gpu_blocks=[2, 3])
+    put2 = engine.submit_put(plan2, gpu_blocks=[2, 3], gpu_state_slots=[1])
     assert state_of(engine, put2) == "succeeded"
 
     # Query sharing 3 of 4 blocks: serving truncates to the last

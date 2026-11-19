@@ -20,12 +20,28 @@ add_library(stratakv_control
   control/executor.cpp)
 add_library(stratakv::control ALIAS stratakv_control)
 
-# Data plane (Phase E, offline portion): registry, CPU tier, scheduler.
-add_library(stratakv_data
+# Data plane (Phase E): registry, CPU tier, scheduler; the STRATAKV_GPU
+# build adds the CUDA transport, IPC source, and page-locked backings.
+set(STRATAKV_DATA_SOURCES
   data/registry.cpp
   data/cpu_tier.cpp
+  data/host_memory.cpp
+  data/tier_table.cpp
   data/transport.cpp)
+if (STRATAKV_GPU)
+  list(APPEND STRATAKV_DATA_SOURCES
+    data/transport_cuda.cu
+    data/ipc_cuda.cu
+    data/host_memory_cuda.cpp)
+endif()
+add_library(stratakv_data ${STRATAKV_DATA_SOURCES})
 add_library(stratakv::data ALIAS stratakv_data)
+
+# PIC on the static libs: the pybind11 module links them into a shared
+# object, and Linux ld rejects non-PIC objects there (macOS tolerates
+# them — latent until the first Linux STRATAKV_PYTHON build).
+set_target_properties(stratakv_core stratakv_metadata stratakv_control
+  stratakv_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 stratakv_target_defaults(stratakv_core)
 stratakv_target_warnings(stratakv_core)
@@ -42,6 +58,14 @@ stratakv_target_sanitizers(stratakv_control)
 stratakv_target_defaults(stratakv_data)
 stratakv_target_warnings(stratakv_data)
 stratakv_target_sanitizers(stratakv_data)
+
+if (STRATAKV_GPU)
+  # Marks page-locked backings available to CpuTier/host_memory (the
+  # CUDA TUs link cudart; host TUs in this target see the define).
+  target_compile_definitions(stratakv_data PRIVATE STRATAKV_HAVE_CUDA=1)
+  target_compile_features(stratakv_data PRIVATE cuda_std_20)
+  target_link_libraries(stratakv_data PRIVATE CUDA::cudart)
+endif()
 
 target_include_directories(stratakv_core
   PUBLIC

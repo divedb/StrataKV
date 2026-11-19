@@ -163,22 +163,37 @@ UBSan; CI gains a Python job.)
 
 ### Phase E — Data plane (registration, CPU tier, transfer engine)
 
-**Status: ◐ offline portion implemented 2026-11-19** (E1 API/contract
-complete — `DeviceMemoryRegistry` with ADR 0005 lifetime semantics,
-IPC export behind the `IIpcHandleSource` seam (fail-loud LogicError in
-CPU-only builds; the CUDA source lands with the STRATAKV_GPU build on
-the GPU host, its contract unit-tested against a counting source); E2
-complete modulo page-locking — `CpuTier` owns the bytes behind the
-plane's id spaces (id→address math, bounds, chunking policy documented;
-cudaHostRegister pinning arrives with STRATAKV_GPU); E3 scheduler
-complete — `TransferScheduler` drain-and-batch (one Enqueue per batch
-per sink; the FlexKV worker.py harvest), `TransportExecutor` bridging
-the Phase D `ITaskExecutor` seam, end-to-end wiring proven with a fake
-transport (TaskEngine graphs → batched transport → completions drive
-terminal states + CommitPut/Release). Deferred to the GPU host: the
-CUDA `ITransport` + strided kernels (transfer.cu harvest), real IPC
-source, pinning, and E4 (gate G2 isolation experiment) — all queued
-with the Phase A ladder.)
+**Status: ◐ GPU portion implemented 2026-11-19 on E-Local** (the
+offline portion landed earlier the same day — `DeviceMemoryRegistry`
+with ADR 0005 lifetime semantics, `CpuTier` byte ownership,
+`TransferScheduler` drain-and-batch with fake-transport wiring. The
+local GPU then enabled the deferred items: E1's real
+`CudaIpcHandleSource` (`cudaIpcGetMemHandle` behind the seam; export
+verified working on WSL2 — cross-process open/attach still unverified,
+queued with E4); E2's page-locked backings (`cudaMallocHost` pools —
+the SM-safe kind per Phase 0 F4 — plus `cudaHostRegister`, plus a
+loud-failure path in CPU-only builds) and the block-granularity fix
+(one block id = model-wide slot, per-layer slice × layers — the FlexKV
+physical-block contract, Appendix B; CpuTier and plane accounting
+aligned); E3's `CudaStreamTransport`: TierTable id→buffer geometry,
+one strided-kernel launch per op on SM-safe memory (copy-engine
+fallback otherwise, per F2/F4), scratch-arena op-parameter upload,
+stream pool, CUDA-event completion from one worker thread —
+byte-verified end to end through TaskEngine (put/get block round trips
++ hybrid state snapshot/restore; 6 GPU tests). API completion:
+SubmitGet/SubmitPut gained `gpu_state_slots` (state ops previously had
+no GPU-side addressing). Also fixed: a TaskEngine race where Wait could
+observe a terminal state before CommitPut/Release side effects ran
+(found by the transport bench's put-evict loop; effects now applied
+atomically under the engine mutex), and non-PIC static libs breaking
+Linux STRATAKV_PYTHON builds. **Acceptance: per-task fixed overhead ≤
+1 ms at 4-block payloads — PASS in in-process mode** (put 184.8 µs /
+get 194.6 µs sync p50; full-stack 0-byte intercept 135.6/163.6 µs vs
+the ~22–32 µs raw floor; log:
+`benchmarks/results/2026-11-19_wsl2_rtx4080super/gpu_transport_bench.log`).
+Remaining for E4 (gate G2): the isolated-process mode experiment and
+cross-process IPC verification, still queued with the Phase A ladder
+(remote-host items).)
 
 **Goal:** GPU registration + tier transfers, benchmarked in both isolation modes per ADR 0002.
 

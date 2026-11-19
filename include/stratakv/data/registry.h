@@ -94,6 +94,12 @@ class DeviceMemoryRegistry {
   /// \throws LogicError when unknown/unregistered.
   std::vector<common::BufferView> ViewsOf(RegistrationId id) const;
 
+  /// \brief The descriptor of one registration (wiring/introspection —
+  /// e.g. TierTable reads group index and layout kind).
+  ///
+  /// \throws LogicError when unknown/unregistered.
+  const GroupDescriptor& DescriptorOf(RegistrationId id) const;
+
   /// \brief The registration owning `group`, or 0 when unregistered
   /// (single registration per group at a time).
   RegistrationId RegistrationForGroup(std::uint32_t group) const;

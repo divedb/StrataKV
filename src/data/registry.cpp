@@ -102,6 +102,17 @@ std::vector<common::BufferView> DeviceMemoryRegistry::ViewsOf(
   return it->second.descriptor.per_layer;
 }
 
+const GroupDescriptor& DeviceMemoryRegistry::DescriptorOf(
+    RegistrationId id) const {
+  std::lock_guard<std::mutex> lock(mu_);
+  auto it = registrations_.find(id);
+  if (it == registrations_.end() || !it->second.live) {
+    throw LogicError("DescriptorOf: unknown or unregistered id " +
+                     std::to_string(id));
+  }
+  return it->second.descriptor;
+}
+
 DeviceMemoryRegistry::RegistrationId
 DeviceMemoryRegistry::RegistrationForGroup(std::uint32_t group) const {
   std::lock_guard<std::mutex> lock(mu_);

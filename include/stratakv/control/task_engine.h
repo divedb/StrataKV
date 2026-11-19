@@ -77,11 +77,15 @@ class TaskEngine final : public CompletionSink {
   /// engine releases its pins when the task reaches any terminal state.
   /// \param gpu_slots Destination ids, position-major / group-minor —
   /// exactly parallel to match.block_refs.
+  /// \param gpu_state_slots Destination GPU state-object ids, parallel
+  /// to match.state_refs; REQUIRED when the match carries sidecar
+  /// states (the engine never invents GPU ids) and empty otherwise.
   /// \throws NotEnoughSpaceError on backpressure; std::invalid_argument
   /// on slot-count mismatch; LogicError after Shutdown.
   common::TaskHandle SubmitGet(
       metadata::MatchResult match,
-      std::span<const common::BlockId> gpu_slots);
+      std::span<const common::BlockId> gpu_slots,
+      std::span<const std::uint32_t> gpu_state_slots = {});
 
   /// \brief Stage + launch an offload of a finished request's
   /// KV/states. Commits the staged entry on success.
@@ -89,12 +93,16 @@ class TaskEngine final : public CompletionSink {
   /// \param plan From MetadataPlane::StagePut.
   /// \param gpu_blocks Source ids, position-major / group-minor —
   /// exactly parallel to plan.blocks_to_store.
+  /// \param gpu_state_slots Source GPU state-object ids, parallel to
+  /// plan.states_to_snapshot; REQUIRED when the plan snapshots sidecar
+  /// states and empty otherwise.
   /// \throws NotEnoughSpaceError on backpressure; LogicError after
   /// Shutdown. No-op task when the plan staged nothing (matched 0 new
   /// blocks) — succeeds immediately without executor involvement.
   common::TaskHandle SubmitPut(
       metadata::MetadataPlane::PutPlan plan,
-      std::span<const common::BlockId> gpu_blocks);
+      std::span<const common::BlockId> gpu_blocks,
+      std::span<const std::uint32_t> gpu_state_slots = {});
 
   /// \brief Cancel a staged/launched task; no-op after terminal state.
   /// Terminal completions arriving later are dropped.

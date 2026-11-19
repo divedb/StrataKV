@@ -57,13 +57,16 @@ TEST(CpuTierTest, PoolGeometryMatchesLayoutMath) {
   plane_config.state_objects_per_group = 8;
   CpuTier tier(layout, TierConfigOf(plane_config));
 
-  // full_attn fp16: 2(K+V) * 2 tokens/block * 2 heads * 64 = 1024 B.
-  EXPECT_EQ(tier.PoolBytesForGroup(0), 16u * 1024u);
+  // full_attn fp16, model-wide block (FlexKV physical-block contract):
+  // 2 layers * 2(K+V) * 2 tokens/block * 2 heads * 64 = 2048 B.
+  EXPECT_EQ(tier.PoolBytesForGroup(0), 16u * 2048u);
   const stratakv::common::BufferView pool = tier.PoolForGroup(0);
   EXPECT_TRUE(pool.base != nullptr);
   EXPECT_EQ(pool.kind, stratakv::common::DeviceKind::kCpu);
-  EXPECT_EQ(pool.size_bytes, 16u * 1024u);
+  EXPECT_EQ(pool.size_bytes, 16u * 2048u);
   EXPECT_EQ(tier.tokens_per_block(), 2u);
+  EXPECT_EQ(tier.BlockSlotBytes(0), 2048u);
+  EXPECT_EQ(tier.StateSlotBytes(1), 2u * 8192u);
 }
 
 TEST(CpuTierTest, AddressMathAndBounds) {
@@ -75,14 +78,14 @@ TEST(CpuTierTest, AddressMathAndBounds) {
 
   char* base = static_cast<char*>(tier.PoolForGroup(0).base);
   EXPECT_EQ(tier.BlockAddress(0, 0), base);
-  EXPECT_EQ(static_cast<char*>(tier.BlockAddress(0, 1)), base + 1024);
+  EXPECT_EQ(static_cast<char*>(tier.BlockAddress(0, 1)), base + 2048);
   EXPECT_EQ(static_cast<char*>(tier.BlockAddress(0, 15)),
-            base + 15 * 1024);
+            base + 15 * 2048);
 
   char* states = static_cast<char*>(tier.StateAddress(1, 0));
   EXPECT_TRUE(states != nullptr);
   EXPECT_EQ(static_cast<char*>(tier.StateAddress(1, 7)),
-            states + 7 * 8192);
+            states + 7 * 16384);
 
   // Out-of-range and wrong-kind ids fail loudly.
   EXPECT_THROW((void)tier.BlockAddress(0, 16), stratakv::LogicError);
@@ -90,6 +93,22 @@ TEST(CpuTierTest, AddressMathAndBounds) {
   EXPECT_THROW((void)tier.StateAddress(0, 0), stratakv::LogicError);
   EXPECT_THROW((void)tier.StateAddress(1, 8), stratakv::LogicError);
 }
+
+#ifdef STRATAKV_TESTS_CPU_ONLY
+// Page-locked backings are a STRATAKV_GPU capability: CPU-only builds
+// must reject them loudly (no silent pageable fallback). The GPU test
+// binary asserts the positive direction.
+TEST(CpuTierTest, PageLockedBackingFailsLoudlyWithoutGpuBuild) {
+  const ModelLayout layout = Hybrid();
+  CpuTierConfig config;
+  config.blocks_per_group = 4;
+  config.state_objects_per_group = 2;
+  config.backing = stratakv::data::HostBacking::kPinned;
+  EXPECT_THROW((void)CpuTier(layout, config), stratakv::LogicError);
+  config.backing = stratakv::data::HostBacking::kRegistered;
+  EXPECT_THROW((void)CpuTier(layout, config), stratakv::LogicError);
+}
+#endif
 
 TEST(CpuTierTest, IdsFlowThroughPlaneIntoTierAddresses) {
   // The Phase C/D id space and the Phase E byte space meet: StagePut

@@ -224,7 +224,8 @@ class PyEngine {
   // ---- task submission (GIL released: inline execution may sleep) ----
 
   std::uint64_t SubmitGet(std::uint64_t match_id,
-                          std::vector<BlockId> gpu_slots) {
+                          std::vector<BlockId> gpu_slots,
+                          std::vector<std::uint32_t> gpu_state_slots) {
     auto it = matches_.find(match_id);
     if (it == matches_.end()) {
       throw stratakv::LogicError("Engine: unknown match id " +
@@ -232,12 +233,14 @@ class PyEngine {
     }
     MatchResult match = std::move(it->second);
     matches_.erase(it);
-    const TaskHandle handle = engine_->SubmitGet(match, gpu_slots);
+    const TaskHandle handle =
+        engine_->SubmitGet(match, gpu_slots, gpu_state_slots);
     return handle.id();
   }
 
   std::uint64_t SubmitPut(std::uint64_t plan_id,
-                          std::vector<BlockId> gpu_blocks) {
+                          std::vector<BlockId> gpu_blocks,
+                          std::vector<std::uint32_t> gpu_state_slots) {
     auto it = plans_.find(plan_id);
     if (it == plans_.end()) {
       throw stratakv::LogicError("Engine: unknown plan id " +
@@ -245,7 +248,8 @@ class PyEngine {
     }
     MetadataPlane::PutPlan plan = std::move(it->second);
     plans_.erase(it);
-    const TaskHandle handle = engine_->SubmitPut(plan, gpu_blocks);
+    const TaskHandle handle =
+        engine_->SubmitPut(plan, gpu_blocks, gpu_state_slots);
     return handle.id();
   }
 
@@ -420,11 +424,11 @@ PYBIND11_MODULE(_core, m) {
       .def("abort_put", &PyEngine::AbortPut, py::arg("plan_id"),
            "Abort a staged put; recycles its reservation.")
       .def("submit_get", &PyEngine::SubmitGet, py::arg("match_id"),
-           py::arg("gpu_slots"),
+           py::arg("gpu_slots"), py::arg("gpu_state_slots") = std::vector<std::uint32_t>{},
            py::call_guard<py::gil_scoped_release>(),
            "Launch the load for a match (GIL released).")
       .def("submit_put", &PyEngine::SubmitPut, py::arg("plan_id"),
-           py::arg("gpu_blocks"),
+           py::arg("gpu_blocks"), py::arg("gpu_state_slots") = std::vector<std::uint32_t>{},
            py::call_guard<py::gil_scoped_release>(),
            "Launch the offload for a staged plan (GIL released).")
       .def("try_wait", &PyEngine::StatesOf, py::arg("task_ids"),

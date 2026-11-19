@@ -109,7 +109,16 @@ struct TaskEngine::Impl {
     return effects;
   }
 
-  void ApplyEffectsUnlocked(const TerminalEffects& effects) {
+  /// \brief Metadata side effects of one terminal transition.
+  ///
+  /// Applied WHILE mu IS HELD (the metadata plane is thread-safe and
+  /// never re-enters the engine): the terminal state and its side
+  /// effects become visible atomically. Wait/TryWait can therefore
+  /// never observe a terminal task whose CommitPut/Release has not run
+  /// — the previous unlocked ordering let callers evict between the
+  /// state flip and CommitPut, shredding entries mid-transition (found
+  /// by the Phase E transport benchmark's put-evict loop).
+  void ApplyEffects(const TerminalEffects& effects) {
     if (effects.match.pin != nullptr) {
       meta->Release(effects.match);  // Get terminal: drop CPU pins.
     }
@@ -161,7 +170,8 @@ TaskEngine::~TaskEngine() {
 
 common::TaskHandle TaskEngine::SubmitGet(
     metadata::MatchResult match,
-    std::span<const common::BlockId> gpu_slots) {
+    std::span<const common::BlockId> gpu_slots,
+    std::span<const std::uint32_t> gpu_state_slots) {
   if (match.matched_blocks > 0 && match.pin == nullptr) {
     throw std::invalid_argument(
         "TaskEngine::SubmitGet: match must carry a pin (lock_matched)");
@@ -173,6 +183,11 @@ common::TaskHandle TaskEngine::SubmitGet(
 
   // One H2D op per token-addressable group over the matched blocks,
   // plus one state-restore op per boundary state (hybrid layouts).
+  if (gpu_state_slots.size() != match.state_refs.size()) {
+    throw std::invalid_argument(
+        "TaskEngine::SubmitGet: gpu_state_slots must parallel "
+        "match.state_refs");
+  }
   std::map<std::uint32_t, std::vector<common::BlockId>> src_by_group;
   std::map<std::uint32_t, std::vector<common::BlockId>> dst_by_group;
   for (std::size_t i = 0; i < match.block_refs.size(); ++i) {
@@ -192,7 +207,8 @@ common::TaskHandle TaskEngine::SubmitGet(
     op.dst_blocks = std::move(dst_by_group[group]);
     graph.AddOp(std::move(op));
   }
-  for (const common::StateRef& ref : match.state_refs) {
+  for (std::size_t i = 0; i < match.state_refs.size(); ++i) {
+    const common::StateRef& ref = match.state_refs[i];
     TransferOp op;
     op.kind = TransferOp::Kind::kStateRestore;
     op.src_tier = 0;
@@ -200,6 +216,7 @@ common::TaskHandle TaskEngine::SubmitGet(
     op.src_group = ref.group;
     op.dst_group = ref.group;
     op.src_object = ref.object;
+    op.dst_object = gpu_state_slots[i];  // Engine-declared GPU slot.
     graph.AddOp(std::move(op));
   }
 
@@ -209,7 +226,8 @@ common::TaskHandle TaskEngine::SubmitGet(
 
 common::TaskHandle TaskEngine::SubmitPut(
     metadata::MetadataPlane::PutPlan plan,
-    std::span<const common::BlockId> gpu_blocks) {
+    std::span<const common::BlockId> gpu_blocks,
+    std::span<const std::uint32_t> gpu_state_slots) {
   if (plan.new_blocks > 0 && plan.entry == nullptr) {
     throw std::invalid_argument(
         "TaskEngine::SubmitPut: plan must carry a staged entry");
@@ -222,6 +240,11 @@ common::TaskHandle TaskEngine::SubmitPut(
 
   // One D2H op per token-addressable group over the new blocks, plus
   // one state-snapshot op per LinearState group at the boundary.
+  if (gpu_state_slots.size() != plan.states_to_snapshot.size()) {
+    throw std::invalid_argument(
+        "TaskEngine::SubmitPut: gpu_state_slots must parallel "
+        "plan.states_to_snapshot");
+  }
   std::map<std::uint32_t, std::vector<common::BlockId>> dst_by_group;
   std::map<std::uint32_t, std::vector<common::BlockId>> src_by_group;
   for (std::size_t i = 0; i < plan.blocks_to_store.size(); ++i) {
@@ -241,13 +264,15 @@ common::TaskHandle TaskEngine::SubmitPut(
     op.dst_blocks = std::move(dsts);
     graph.AddOp(std::move(op));
   }
-  for (const common::StateRef& ref : plan.states_to_snapshot) {
+  for (std::size_t i = 0; i < plan.states_to_snapshot.size(); ++i) {
+    const common::StateRef& ref = plan.states_to_snapshot[i];
     TransferOp op;
     op.kind = TransferOp::Kind::kStateSnapshot;
     op.src_tier = 1;
     op.dst_tier = 0;
     op.src_group = ref.group;
     op.dst_group = ref.group;
+    op.src_object = gpu_state_slots[i];  // Engine-declared GPU slot.
     op.dst_object = ref.object;
     graph.AddOp(std::move(op));
   }
@@ -305,13 +330,13 @@ common::TaskHandle TaskEngine::Submit(
       // without the executor.
       effects = impl_->FinishLocked(id, common::TaskState::kSucceeded,
                                      std::string());
+      impl_->ApplyEffects(effects);
       has_effects = true;
     } else {
       task.state = common::TaskState::kLaunched;
     }
   }
   if (has_effects) {
-    impl_->ApplyEffectsUnlocked(effects);
     return handle;
   }
   impl_->executor->Execute(graph, handle, *this);
@@ -332,8 +357,8 @@ bool TaskEngine::Cancel(common::TaskHandle handle) {
     effects = impl_->FinishLocked(handle.id(),
                                   common::TaskState::kCancelled,
                                   "cancelled by caller");
+    impl_->ApplyEffects(effects);
   }
-  impl_->ApplyEffectsUnlocked(effects);
   if (launched) {
     impl_->executor->Cancel(handle);  // Best-effort; late ops dropped.
   }
@@ -448,9 +473,9 @@ void TaskEngine::Shutdown(std::chrono::milliseconds grace) {
                                 "engine shutdown"));
       }
     }
-  }
-  for (const TerminalEffects& effect : effects) {
-    impl_->ApplyEffectsUnlocked(effect);
+    for (const TerminalEffects& effect : effects) {
+      impl_->ApplyEffects(effect);
+    }
   }
   for (const common::TaskHandle& handle : launched) {
     impl_->executor->Cancel(handle);
@@ -493,9 +518,9 @@ void TaskEngine::OnOpCompleted(std::uint64_t op_id, bool ok) {
           task.error.empty() ? common::TaskState::kSucceeded
                              : common::TaskState::kFailed,
           task.error);
+      impl_->ApplyEffects(effects);
     }
   }
-  impl_->ApplyEffectsUnlocked(effects);
 }
 
 }  // namespace stratakv::control

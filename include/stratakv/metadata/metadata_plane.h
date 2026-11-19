@@ -134,12 +134,16 @@ class MetadataPlane {
   /// \brief Free state objects for a LinearState group.
   std::uint32_t num_free_states(std::uint32_t group) const;
 
-  /// \brief Bytes of one token block in `group` per the layout geometry
-  /// (common::BlockBytes; 0 for LinearState groups).
+  /// \brief Bytes of one MODEL-WIDE token block in `group` per the
+  /// layout geometry (per-layer BlockBytes × layers in group — the
+  /// FlexKV physical-block contract; 0 for LinearState groups).
   std::uint64_t BlockBytesForGroup(std::uint32_t group) const {
-    return common::BlockBytes(layout_.Group(static_cast<int>(group)).spec,
+    const common::LayerGroup& group_spec =
+        layout_.Group(static_cast<int>(group));
+    return common::BlockBytes(group_spec.spec,
                               static_cast<int>(tokens_per_block_),
-                              config_.dtype_bytes);
+                              config_.dtype_bytes) *
+           group_spec.layer_indices.size();
   }
 
  private:

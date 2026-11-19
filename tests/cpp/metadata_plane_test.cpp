@@ -109,8 +109,9 @@ TEST(MetadataPlaneTest, StagePutReservesAndEvictRecycles) {
   EXPECT_EQ(evicted.blocks.size(), static_cast<std::size_t>(4));
   EXPECT_EQ(evicted.entries.size(), static_cast<std::size_t>(1));
   EXPECT_GT(evicted.bytes_reclaimed, 0u);
-  // 4 blocks * 2(K+V) * 2 tpb * 2 heads * 64 head_size * 2 bytes.
-  EXPECT_EQ(evicted.bytes_reclaimed, 4ull * 2 * 2 * 2 * 64 * 2);
+  // 4 blocks * 4 layers * 2(K+V) * 2 tpb * 2 heads * 64 head_size * 2 B
+  // (model-wide block: per-layer slice × layers — FlexKV contract).
+  EXPECT_EQ(evicted.bytes_reclaimed, 4ull * 4 * 2 * 2 * 2 * 64 * 2);
 
   // The entry handle died with the eviction.
   EXPECT_THROW(plane.CommitPut(entry), stratakv::LogicError);
