@@ -52,6 +52,14 @@ if (STRATAKV_BUILD_TESTS)
         PYTHONPATH=${PROJECT_SOURCE_DIR}/python
         STRATAKV_REQUIRE_NATIVE=1
         ${Python3_EXECUTABLE} -m pytest ${PROJECT_SOURCE_DIR}/tests/python -q)
+    # Phase F: connector suite (vLLM adapter against the fake-vLLM
+    # harness; real bytes on STRATAKV_GPU builds, simulation on CPU).
+    add_test(NAME stratakv_connector_tests
+      COMMAND ${CMAKE_COMMAND} -E env
+        PYTHONPATH=${PROJECT_SOURCE_DIR}/python:${PROJECT_SOURCE_DIR}/integrations/vllm/v0_17:${PROJECT_SOURCE_DIR}/integrations/vllm/tests
+        STRATAKV_REQUIRE_NATIVE=1
+        ${Python3_EXECUTABLE} -m pytest
+        ${PROJECT_SOURCE_DIR}/integrations/vllm/tests -q)
   endif()
 endif()
 

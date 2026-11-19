@@ -180,6 +180,7 @@ class PutPlan:
     matched_blocks: int
     new_blocks: int
     feasible: bool
+    num_states: int = 0  # Sidecar states to snapshot (hybrid).
 
 
 class Engine:
@@ -268,11 +269,13 @@ class Engine:
 
     def plan_put(self, token_ids: Sequence[int]) -> PutPlan:
         p = self._engine.plan_put([int(t) for t in token_ids])
-        return PutPlan(p.plan_id, p.matched_blocks, p.new_blocks, p.feasible)
+        return PutPlan(p.plan_id, p.matched_blocks, p.new_blocks, p.feasible,
+                      p.num_states)
 
     def stage_put(self, token_ids: Sequence[int]) -> PutPlan:
         p = self._engine.stage_put([int(t) for t in token_ids])
-        return PutPlan(p.plan_id, p.matched_blocks, p.new_blocks, p.feasible)
+        return PutPlan(p.plan_id, p.matched_blocks, p.new_blocks, p.feasible,
+                      p.num_states)
 
     def submit_put(self, plan: PutPlan,
                    gpu_blocks: Sequence[int],

@@ -204,6 +204,32 @@ non-PIC static libs breaking Linux Python builds, and CMake 3.22/CUDA
 
 ### Phase F — vLLM adapter and hybrid support
 
+**Status: F1 ✅ / F2 ◐ / F3 ✅ / F4 blocked (2026-11-19)** — F1:
+`integrations/vllm/v0_17/stratakv_connector.py` implements the
+mainline connector hook set over the native facade (worker role:
+multi-group registration from raw descriptors — torch optional at the
+boundary; scheduler role: match/submit/one-poll-per-step;
+`build_connector_meta` returns empty by design). v1 topology is
+single-process vLLM (both roles share the engine); the cross-process
+registration endpoint stays future work with the real environment.
+Tested WITHOUT vLLM via a fake-vLLM harness (duck-typed tensors over
+the debug device helpers; scheduler-step driver) — ctest
+`stratakv_connector_tests` runs in simulation on CPU builds and with
+REAL bytes on GPU builds. F2 (byte leg): cold-put → warm-get round
+trip through the hooks is byte-identical per block on both GPU hosts,
+including a REAL-torch test on the E0 remote (torch 2.8 present there;
+verified via `torch.equal`). Model-output parity needs vLLM itself.
+F3: hybrid layouts (multi-group + LinearState sidecars +
+`HybridSidecarMixin` slot bookkeeping + SWA store-all) enforced at the
+connector boundary — the ADR 0003 truncation test passes through
+vLLM's hook order; `num_states` added to the facade PutPlan to size
+`gpu_state_slots`. Found+fixed in the connector: try_wait tuple
+unpacking compared the error field instead of the state (completions
+never surfaced), group-index vs group-name keying in the get path, and
+simulation-mode registration guards. F4 (real hybrid model): blocked
+on a vLLM installation (E2-class environment; the remote already has
+torch 2.8 + CUDA 12.8 — vLLM itself is the missing piece).
+
 **Goal:** thin connector + the hybrid model upstream lacks generically.
 
 | # | Task | Deliverable | Size |

@@ -344,6 +344,9 @@ class PyEngine {
     std::uint32_t matched_blocks = 0;
     std::uint32_t new_blocks = 0;
     bool feasible = true;
+    /// \brief Sidecar states this plan snapshots (hybrid layouts) —
+    /// the adapter sizes gpu_state_slots from this.
+    std::uint32_t num_states = 0;
   };
 
   PyPutPlan StagePut(std::vector<TokenId> tokens) {
@@ -354,6 +357,8 @@ class PyEngine {
     out.matched_blocks = plan.matched_blocks;
     out.new_blocks = plan.new_blocks;
     out.feasible = plan.feasible;
+    out.num_states =
+        static_cast<std::uint32_t>(plan.states_to_snapshot.size());
     plans_.emplace(id, std::move(plan));
     return out;
   }
@@ -666,7 +671,8 @@ PYBIND11_MODULE(_core, m) {
       .def_readonly("matched_blocks",
                     &PyEngine::PyPutPlan::matched_blocks)
       .def_readonly("new_blocks", &PyEngine::PyPutPlan::new_blocks)
-      .def_readonly("feasible", &PyEngine::PyPutPlan::feasible);
+      .def_readonly("feasible", &PyEngine::PyPutPlan::feasible)
+      .def_readonly("num_states", &PyEngine::PyPutPlan::num_states);
 
   py::class_<PyEngine>(
       m, "Engine",
