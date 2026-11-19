@@ -5,7 +5,7 @@ for mainline-era vLLM (>= 0.17.2 connector API; roadmap F1, design.md
 Phase F). 0.10.1.1 support is deliberately absent until E0 parity is
 actually required.
 
-## What is implemented (2026-11-19)
+## What is implemented (2026-11-20)
 
 - **Worker role**: `register_kv_caches` parses the per-group GPU
   tensors (raw descriptors — torch stays at this boundary; anything
@@ -18,9 +18,9 @@ actually required.
   readiness-filtered match; ADR 0003 no-partial-caching truncation
   surfaces here), `update_state_after_alloc` (submit_get with
   position-major/group-minor slot interleaving), `build_connector_meta`
-  (returns `None` — the engine flushes on the next poll),
-  `update_connector_output` (the single per-step native poll and
-  launch point), `request_finished` (stage+submit put, sidecar states
+  (returns empty vLLM metadata),
+  `update_connector_output` and worker `get_finished` (native polling
+  and launch, including empty async-load steps), `request_finished` (stage+submit put, sidecar states
   via `gpu_state_slots`), `get_finished` (finished_sending/recving).
 - **Hybrid (F3)**: multi-group layouts (FullAttn/Mla/SWA/LinearState),
   `HybridSidecarMixin` slot bookkeeping, SWA groups register
@@ -46,13 +46,32 @@ assertions skipped, loudly warned).
 
 ctests as `stratakv_connector_tests` (needs `-DSTRATAKV_PYTHON=ON`).
 
-## Not yet (blocked on the E2 vLLM environment)
+## Real vLLM validation
 
-- Real vLLM integration test (F1's ctest-in-vLLM leg) — needs vLLM >=
-  0.17.2 installed (the E0 host has torch 2.8 + CUDA 12.8 already).
-- F2's model-output parity and F4's real hybrid-model validation.
-- Cross-process scheduler/worker topology (registration endpoint).
+Validated on vLLM 0.34.0, torch 2.14.0, RTX 3080 Ti with
+Qwen2.5-0.5B-Instruct. The connector derives geometry and layer names
+from `kv_cache_config` (64-token blocks on this backend). Two rounds
+produce identical completions to the baseline with vLLM prefix caching
+disabled; puts, gets, and StrataKV match hits all advance.
 
-Status: **F1 done (adapter code + fake-harness integration), F2
-partial (byte parity done; model-output parity blocked), F3 done
-(adapter level), F4 blocked** — see `roadmap.md` Phase F status.
+The round-2 hang required polling in worker `get_finished`, including
+empty steps. Finished request IDs announce generation completion and
+must still be reported when their transfers finish. Offloads select
+complete new blocks after the matched prefix, excluding partial tails.
+Native transfer failures raise `ConnectorError` with the native error;
+automatic recomputation after transfer failure is not implemented.
+
+Run on the GPU host:
+
+```bash
+STRATAKV_TEST_MODEL=/path/to/qwen2.5-0.5b-instruct \
+PYTHONPATH=python:integrations/vllm/v0_17:integrations/vllm/tests \
+VLLM_ENABLE_V1_MULTIPROCESSING=0 timeout 180 python3 -m pytest \
+  integrations/vllm/tests -q
+```
+
+Remaining: F4 real hybrid-model validation and cross-process
+scheduler/worker registration (ADR 0005/0006). Hybrid support is tested
+at the adapter level; real vLLM HMA support remains unvalidated.
+
+Status: **F1 done, F2 done, F3 done (adapter level), F4 pending**.

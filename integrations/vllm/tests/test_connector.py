@@ -181,7 +181,7 @@ def test_hybrid_truncation_enforces_no_partial_caching():
 
     put2 = FakeRequest("h2", [1, 2, 3, 4, 5, 6, 7, 8])
     scheduler.get_num_new_matched_tokens(put2, 0)  # Extends (2+2).
-    scheduler.request_finished(put2, {"full_attn": [2, 3]})
+    scheduler.request_finished(put2, {"full_attn": [0, 1, 2, 3]})
     assert pump(scheduler, worker, "h2", sending=True)
 
     # Query sharing 3 of 4 blocks: must truncate to block 2 — the last
@@ -291,3 +291,48 @@ def test_real_torch_tensors_round_trip():
         assert torch.equal(reloaded.cpu(), golden[i]), \
             f"layer {i}: KV bytes changed across offload+reload"
     scheduler.shutdown()
+
+
+def test_worker_completion_polls_without_scheduler_output():
+    """An external-only load must progress on an otherwise empty step."""
+    from types import SimpleNamespace
+    handle = SimpleNamespace(task_id=42)
+    engine = SimpleNamespace(try_wait=lambda handles: [
+        (handle, "succeeded", "")])
+    connector = StrataKVConnectorV1.__new__(StrataKVConnectorV1)
+    import threading
+    connector._shared = SimpleNamespace(
+        engine=engine, pending_gets={"warm": handle}, pending_puts={},
+        finished_sending={"cold"}, finished_recving=set(),
+        lock=threading.Lock())
+    # finished_req_ids announces generation completion, not cancellation.
+    assert connector.get_finished({"cold"}) == ({"cold"}, {"warm"})
+    assert connector.get_finished(set()) == (None, None)
+
+
+def test_transfer_failure_surfaces_native_error():
+    from types import SimpleNamespace
+    handle = SimpleNamespace(task_id=42)
+    connector = StrataKVConnectorV1.__new__(StrataKVConnectorV1)
+    connector._shared = SimpleNamespace(
+        engine=SimpleNamespace(try_wait=lambda handles: [
+            (handle, "failed", "invalid GPU slot")]),
+        pending_gets={"warm": handle}, pending_puts={})
+    with pytest.raises(ConnectorError, match="invalid GPU slot"):
+        connector.get_finished(set())
+
+
+def test_put_excludes_partial_tail_block():
+    from types import SimpleNamespace
+    submitted = []
+    plan = SimpleNamespace(matched_blocks=1, new_blocks=2, num_states=0)
+    connector = StrataKVConnectorV1.__new__(StrataKVConnectorV1)
+    connector._shared = SimpleNamespace(
+        _token_groups=["full_attn"], config=SimpleNamespace(layout=LAYOUT),
+        engine=SimpleNamespace(
+            stage_put=lambda tokens: plan,
+            submit_put=lambda plan, slots, states: submitted.append(slots)),
+        connector_puts=0, pending_puts={})
+    connector.request_finished(FakeRequest("cold", list(range(3 * TPB + 5))),
+                               [10, 11, 12, 13])
+    assert submitted == [[11, 12]]

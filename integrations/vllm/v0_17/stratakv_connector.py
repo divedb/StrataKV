@@ -9,9 +9,10 @@ vLLM ``KVConnectorBase_V1`` hook set onto the native Python facade:
   All per-forward hooks are no-ops: the native data plane moves KV
   without vLLM involvement.
 - **Scheduler role**: native match/submit/try_wait per step.
-  ``build_connector_meta`` returns ``None`` (the native engine needs
+  ``build_connector_meta`` returns empty metadata (the native engine needs
   no worker-side metadata); ``update_connector_output`` is the single
-  per-step poll — which is also the engine's launch point
+  scheduler-side poll; worker ``get_finished`` also polls so empty
+  async-load steps make progress — polling is the engine's launch point
   (``ITaskExecutor::Flush`` fires on every Wait/TryWait).
 
 Topology (v1): **single-process vLLM** (``VLLM_ENABLE_V1_MULTIPROCESSING=0``
@@ -535,10 +536,13 @@ class StrataKVConnectorV1(HybridSidecarMixin, _VllmBase):
             self, finished_req_ids: set[str]
     ) -> tuple[set[str] | None, set[str] | None]:
         """0.34 shape: always a (sending, recving) tuple, None-empty."""
+        # Empty async-load steps have no model output to trigger the
+        # scheduler poll. Launch and reap transfers here as well.
+        self.update_connector_output(None)
         shared = self._shared
         with shared.lock:
-            sending = shared.finished_sending - finished_req_ids
-            recving = shared.finished_recving - finished_req_ids
+            sending = set(shared.finished_sending)
+            recving = set(shared.finished_recving)
             shared.finished_sending -= sending
             shared.finished_recving -= recving
         return (sending or None, recving or None)
@@ -624,7 +628,8 @@ class StrataKVConnectorV1(HybridSidecarMixin, _VllmBase):
         correct (the native engine needs no worker-side metadata).
         """
         if _HAS_VLLM:
-            from vllm.distributed.kv_transfer.kv_connector.v1.base                 import KVConnectorMetadata
+            from vllm.distributed.kv_transfer.kv_connector.v1.base import (
+                KVConnectorMetadata)
             return KVConnectorMetadata()
         return None
 
@@ -636,9 +641,13 @@ class StrataKVConnectorV1(HybridSidecarMixin, _VllmBase):
             shared.pending_puts.values())
         if not handles:
             return
-        results = dict((h.task_id, state)
-                       for h, state, _error
-                       in shared.engine.try_wait(handles))
+        items = shared.engine.try_wait(handles)
+        results = {}
+        for handle, state, error in items:
+            if state == "failed":
+                raise ConnectorError(
+                    f"native KV transfer {handle.task_id} failed: {error}")
+            results[handle.task_id] = state
         for request_id, handle in list(shared.pending_gets.items()):
             if results.get(handle.task_id) == "succeeded":
                 shared.pending_gets.pop(request_id)
@@ -683,8 +692,10 @@ class StrataKVConnectorV1(HybridSidecarMixin, _VllmBase):
             # Nothing new to store (fully matched earlier).
             return (False, None)
         if len(token_groups) == 1:
-            gpu_blocks = all_ids[-plan.new_blocks:] \
-                if plan.new_blocks else []
+            # Skip the cached prefix, then take complete new blocks.
+            # The final allocated block can contain an incomplete tail.
+            gpu_blocks = all_ids[plan.matched_blocks:
+                                 plan.matched_blocks + plan.new_blocks]
         else:
             # blocks_to_store is position-major / group-minor, same as
             # match refs — interleave per position (gpu_blocks must

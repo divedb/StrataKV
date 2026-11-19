@@ -1,5 +1,13 @@
 # HANDOFF: real-vLLM integration test — round-2 generate hangs
 
+**Resolved 2026-11-20.** Worker `get_finished` must poll the native engine
+on empty async-load steps; generation-finished IDs must not be removed
+from transfer completions. Once unblocked, parity exposed the put path
+selecting the partial tail block: select complete new blocks after the
+matched prefix instead. Real vLLM 0.34 two-round parity now passes.
+Native transfer failures raise with their error instead of waiting forever.
+The investigation notes below describe the original failure.
+
 Written 2026-11-20 for the next session. Everything you need is in
 this file; read it fully before touching code. **Local repo is the
 single source of truth** — never edit code on the remote; edit locally,

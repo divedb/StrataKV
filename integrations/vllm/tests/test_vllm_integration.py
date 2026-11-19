@@ -45,7 +45,6 @@ def test_connector_subclasses_real_base():
         assert callable(getattr(StrataKVConnectorV1, hook, None)), hook
 
 
-@pytest.mark.order(after="test_connector_subclasses_real_base")
 def test_offline_serving_parity_with_connector():
     """F2: identical outputs with vs without the connector, with KV
     actually offloaded + reloaded through StrataKV."""
@@ -115,4 +114,5 @@ def test_offline_serving_parity_with_connector():
     # And the connector actually did work (offloads at request finish;
     # the duplicate prompt's prefix is served by the native match).
     assert stats[0] > 0, "no puts reached the engine"
+    assert stats[1] > 0, "no gets reached the engine"
     assert stats[2] > 0, "no prefix matches served from StrataKV"
