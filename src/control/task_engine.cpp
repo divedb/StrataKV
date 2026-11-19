@@ -366,6 +366,10 @@ bool TaskEngine::Cancel(common::TaskHandle handle) {
 }
 
 WaitResult TaskEngine::TryWait(std::span<const common::TaskHandle> handles) {
+  // Per-step launch point (ITaskExecutor::Flush): submissions batched
+  // since the last poll launch here — before the engine mutex, so the
+  // lock order stays engine.mu -> scheduler.mu (never reversed).
+  impl_->executor->Flush();
   std::lock_guard<std::mutex> lock(impl_->mu);
   WaitResult result;
   result.items.reserve(handles.size());
@@ -384,6 +388,8 @@ WaitResult TaskEngine::TryWait(std::span<const common::TaskHandle> handles) {
 
 WaitResult TaskEngine::Wait(std::span<const common::TaskHandle> handles,
                             std::chrono::milliseconds timeout) {
+  // Per-step launch point (see TryWait).
+  impl_->executor->Flush();
   const auto deadline = std::chrono::steady_clock::now() + timeout;
   {
     std::unique_lock<std::mutex> lock(impl_->mu);

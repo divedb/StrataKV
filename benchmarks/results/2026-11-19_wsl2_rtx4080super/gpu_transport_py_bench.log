@@ -1,0 +1,37 @@
+# StrataKV Phase E: Python-layer transport bench — official run
+date: 2026-11-19T13:36:19Z
+harness commit: c3e4bab1e443887ac5c1b2ab5aa8f9d7c29a158c (worktree: DIRTY)
+python: Python 3.12.3 | os: 6.6.87.2-microsoft-standard-WSL2
+build: build-py, Release, STRATAKV_PYTHON=ON + STRATAKV_GPU=ON
+
+== StrataKV Python-layer transport bench (real stack) ==
+block geometry: 24 layers x 8192 B = 196608 B | pinned CPU tier | in-process | CPython 3.12
+
+== SYNC mode: Python submit -> wait per task ==
+task   blocks     bytes    p50_us    p95_us    p99_us    GB/s
+put         1    196608     184.7     230.5     268.0    1.06
+put         4    786432     190.6     248.3     264.0    4.13
+put        16   3145728     441.1     496.7     521.7    7.13
+put        64  12582912    1308.7    1417.0    1466.5    9.61
+get         1    196608     178.6     250.3     304.4    1.10
+get         4    786432     190.7     287.7     445.7    4.12
+get        16   3145728     335.7     372.8     411.6    9.37
+get        64  12582912     812.9     879.4     892.6   15.48
+
+== Match-only latency (Python facade, p50 us) ==
+    1 blocks: 2.8
+    4 blocks: 4.9
+   16 blocks: 13.3
+   64 blocks: 41.6
+
+== Per-task fixed overhead (0-byte intercept, sync p50) ==
+task     intercept_us    marginal_GB/s
+put             144.8            10.81
+get             163.2            19.32
+
+== References (same box, same geometry) ==
+acceptance bar (roadmap E): <= 1000 us at 4 blocks -> PASS (python put 190.6 / get 190.7 us)
+C++ full stack (gpu_transport_bench): put 184.8 / get 194.6 us at 4 blocks; intercepts 135.6 / 163.6 us
+Phase 0 raw kernel floor: h2d 74.9 / d2h 82.9 us at 4 blocks
+FlexKV v1.0.0 (E0): 10850-21040 us at ~4 blocks
+verifications passed

@@ -1,18 +1,27 @@
 // stratakv_py.cpp — pybind11 module for the StrataKV native core.
 //
 // Phase D surface (design.md Python facade): Engine with match /
-// submit_get / submit_put / try_wait / wait / cancel / shutdown,
-// driving MetadataPlane + TaskEngine through the InlineExecutor
-// simulation transport (no bytes are moved; Phase E installs the CUDA
-// transport). GIL policy per ADR 0004:
+// stage_put / submit_get / submit_put / try_wait / wait / cancel /
+// shutdown. Phase E (GPU builds, STRATAKV_BINDINGS_GPU) adds the real
+// data plane: use_gpu_transport=True defers engine start until the
+// adapter has registered its GPU groups (register_gpu_group with raw
+// descriptors — torch stays out of the core path by design), then
+// start() wires CpuTier + DeviceMemoryRegistry + TierTable +
+// CudaStreamTransport + TransferScheduler behind the TaskEngine.
+// CPU-only builds keep the InlineExecutor simulation (no bytes moved)
+// and fail loudly on the GPU options. GIL policy per ADR 0004:
 //   - match():           holds the GIL (measured tens of µs budget;
 //                        MatchForGet p50 53 µs at 1k blocks).
 //   - wait():            releases the GIL while blocked in C++.
-//   - submit_get/put():  releases the GIL (inline execution may sleep).
+//   - submit_get/put():  releases the GIL (execution is queued, never
+//                        run inline on the caller).
+//   - start():           releases the GIL (device allocations).
 //   - cancel/try_wait:   hold the GIL (non-blocking, fast).
 // No native thread ever calls into Python (completion delivery is
 // poll-based: completion_fd + drain_completions on the caller's
-// thread).
+// thread). Debug device helpers (debug_alloc_device etc.) exist for
+// tests/standalone use only — real adapters register engine-owned
+// memory, never StrataKV allocations.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -32,15 +41,29 @@
 #include "stratakv/common/model_layout.h"
 #include "stratakv/control/executor.h"
 #include "stratakv/control/task_engine.h"
+#include "stratakv/data/cpu_tier.h"
+#include "stratakv/data/registry.h"
+#include "stratakv/data/transport.h"
+#include "stratakv/data/tier_table.h"
 #include "stratakv/metadata/index.h"
 #include "stratakv/metadata/metadata_plane.h"
+
+#if defined(STRATAKV_BINDINGS_GPU)
+#include <cuda_runtime.h>
+
+#include "stratakv/data/transport_cuda.h"
+
+using stratakv::data::CudaStreamTransport;
+#endif
 
 namespace py = pybind11;
 
 namespace {
 
 using stratakv::common::BlockId;
+using stratakv::common::BufferView;
 using stratakv::common::CacheEntry;
+using stratakv::common::DeviceKind;
 using stratakv::common::FullAttnSpec;
 using stratakv::common::LayerGroup;
 using stratakv::common::LayerSpec;
@@ -52,8 +75,18 @@ using stratakv::common::TaskHandle;
 using stratakv::common::TaskState;
 using stratakv::common::TokenId;
 using stratakv::control::InlineExecutor;
+using stratakv::control::ITaskExecutor;
 using stratakv::control::TaskEngine;
 using stratakv::control::TaskEngineConfig;
+using stratakv::data::CpuTier;
+using stratakv::data::CpuTierConfig;
+using stratakv::data::DeviceMemoryRegistry;
+using stratakv::data::GroupDescriptor;
+using stratakv::data::GroupLayout;
+using stratakv::data::HostBacking;
+using stratakv::data::TierTable;
+using stratakv::data::TransferScheduler;
+using stratakv::data::TransportExecutor;
 using stratakv::metadata::MatchResult;
 using stratakv::metadata::MetadataPlane;
 using stratakv::metadata::MetadataPlaneConfig;
@@ -83,8 +116,19 @@ struct PyEngineConfig {
   std::uint32_t max_in_flight = 1024;
   /// \brief Per-op simulated transfer latency (InlineExecutor); 0 =
   /// complete synchronously. Scheduler-side integration testing only —
-  /// no data is moved.
+  /// no data is moved. Ignored when use_gpu_transport.
   int inline_delay_ms = 0;
+  /// \brief Phase E: construct the real data plane (CpuTier +
+  /// CudaStreamTransport) instead of the InlineExecutor simulation.
+  /// Requires a STRATAKV_GPU build of this module; the engine then
+  /// requires register_gpu_group(...) + start() before submissions.
+  bool use_gpu_transport = false;
+  /// \brief CPU tier page-locking: "pageable" | "pinned" | "registered"
+  /// (GPU transport only; "pinned" = cudaMallocHost is the only
+  /// kernel-safe kind on WSL2 — benchmark F4).
+  std::string cpu_backing = "pageable";
+  /// \brief Transport stream-pool size (GPU transport only).
+  std::uint32_t transport_streams = 2;
 };
 
 LayerSpec BuildSpec(const PyLayoutGroup& g) {
@@ -135,17 +179,122 @@ class PyEngine {
     plane_config.blocks_per_group = cfg.blocks_per_group;
     plane_config.state_objects_per_group = cfg.state_objects_per_group;
     plane_config.state_object_bytes = cfg.state_object_bytes;
+    config_ = cfg;
 
-    auto delay = std::chrono::milliseconds(cfg.inline_delay_ms);
-    executor_ = std::make_shared<InlineExecutor>(delay);
     auto index = std::make_unique<RadixIndex>(*layout_);
     plane_ = std::make_unique<MetadataPlane>(*layout_, std::move(index),
                                              plane_config);
-    TaskEngineConfig engine_config;
-    engine_config.max_in_flight = cfg.max_in_flight;
-    engine_ = std::make_unique<TaskEngine>(plane_.get(), executor_,
-                                           engine_config);
+    if (!cfg.use_gpu_transport) {
+      // Phase D simulation path: ready immediately, no bytes move.
+      StartEngine(std::make_shared<InlineExecutor>(
+          std::chrono::milliseconds(cfg.inline_delay_ms)));
+      return;
+    }
+#if !defined(STRATAKV_BINDINGS_GPU)
+    throw stratakv::LogicError(
+        "Engine: use_gpu_transport requires a STRATAKV_PYTHON build "
+        "configured with -DSTRATAKV_GPU=ON (this module is CPU-only; "
+        "the InlineExecutor simulation remains available)");
+#else
+    gpu_mode_ = true;  // Engine constructed by start().
+#endif
   }
+
+#if defined(STRATAKV_BINDINGS_GPU)
+  /// \brief Register one group's engine-owned GPU buffers (ADR 0005:
+  /// raw descriptors, never torch pointers). LAYERWISE: one (addr,
+  /// bytes) per layer of the group, capacity per-base slots; BLOCKWISE:
+  /// exactly one flat buffer. Only before start().
+  std::uint64_t RegisterGpuGroup(const std::string& name,
+                                 std::uint32_t group,
+                                 const std::string& layout_kind,
+                                 std::vector<std::pair<std::uint64_t,
+                                                       std::uint64_t>>
+                                     buffers,
+                                 std::uint32_t capacity_blocks,
+                                 int device_id) {
+    if (!gpu_mode_) {
+      throw stratakv::LogicError(
+          "Engine: register_gpu_group requires use_gpu_transport=True");
+    }
+    if (engine_ != nullptr) {
+      throw stratakv::LogicError("Engine: already started");
+    }
+    if (buffers.empty()) {
+      throw std::invalid_argument("register_gpu_group: no buffers");
+    }
+    GroupLayout layout = layout_kind == "blockwise"
+                             ? GroupLayout::kBlockwise
+                             : GroupLayout::kLayerwise;
+    if (layout_kind != "blockwise" && layout_kind != "layerwise") {
+      throw std::invalid_argument(
+          "register_gpu_group: layout must be 'layerwise' or 'blockwise'");
+    }
+    GroupDescriptor descriptor;
+    descriptor.group_name = name;
+    descriptor.group = group;
+    descriptor.layout = layout;
+    descriptor.device_id = device_id;
+    for (const auto& [address, bytes] : buffers) {
+      BufferView view;
+      view.base = reinterpret_cast<void*>(address);
+      view.kind = DeviceKind::kGpu;
+      view.device_id = device_id;
+      view.size_bytes = bytes;
+      descriptor.per_layer.push_back(view);
+    }
+    const auto registration = registry_->RegisterGroup(
+        std::move(descriptor));  // Validates layout/view contract.
+    registrations_.push_back({registration, capacity_blocks});
+    return registration;
+  }
+
+  /// \brief Build the data plane (CpuTier, TierTable, transport,
+  /// scheduler) and the TaskEngine. Requires >= 1 GPU registration.
+  void Start() {
+    if (!gpu_mode_) {
+      throw stratakv::LogicError(
+          "Engine: start() requires use_gpu_transport=True");
+    }
+    if (engine_ != nullptr) {
+      throw stratakv::LogicError("Engine: already started");
+    }
+    if (registrations_.empty()) {
+      throw stratakv::LogicError(
+          "Engine: start() requires at least one register_gpu_group "
+          "(ops address the GPU tier)");
+    }
+    HostBacking backing = HostBacking::kPageable;
+    if (config_.cpu_backing == "pinned") {
+      backing = HostBacking::kPinned;
+    } else if (config_.cpu_backing == "registered") {
+      backing = HostBacking::kRegistered;
+    } else if (config_.cpu_backing != "pageable") {
+      throw std::invalid_argument(
+          "EngineConfig.cpu_backing must be pageable|pinned|registered");
+    }
+    CpuTierConfig tier_config;
+    tier_config.blocks_per_group = config_.blocks_per_group;
+    tier_config.state_objects_per_group = config_.state_objects_per_group;
+    tier_config.backing = backing;
+    tier_ = std::make_unique<CpuTier>(*layout_, tier_config);
+
+    TierTable table;
+    table.AddCpuTier(0, *layout_, *tier_);
+    for (const auto& [registration, capacity] : registrations_) {
+      table.AddGpuTier(1, *registry_, registration, *layout_, capacity);
+    }
+
+    CudaStreamTransport::Config transport_config;
+    transport_config.streams = config_.transport_streams;
+    auto transport = std::make_unique<CudaStreamTransport>(
+        std::move(table), transport_config);
+    scheduler_ = std::make_shared<TransferScheduler>(
+        std::move(transport), stratakv::data::IsolationMode::kInProcess,
+        TransferScheduler::Config());
+    StartEngine(std::make_shared<TransportExecutor>(scheduler_));
+  }
+#endif  // STRATAKV_BINDINGS_GPU
 
   // ---- match (holds the GIL; sub-ms budget) ----
 
@@ -221,7 +370,19 @@ class PyEngine {
     plans_.erase(it);
   }
 
-  // ---- task submission (GIL released: inline execution may sleep) ----
+  // ---- task submission (GIL released: execution is queued, never
+  // run inline on the calling thread under the real transport) ----
+
+  /// \brief The started engine (submissions/waits need it; match and
+  /// staging work pre-start — they only touch the metadata plane).
+  TaskEngine& Eng() {
+    if (engine_ == nullptr) {
+      throw stratakv::LogicError(
+          "Engine: not started — call start() after registering GPU "
+          "groups (use_gpu_transport engines defer construction)");
+    }
+    return *engine_;
+  }
 
   std::uint64_t SubmitGet(std::uint64_t match_id,
                           std::vector<BlockId> gpu_slots,
@@ -231,10 +392,12 @@ class PyEngine {
       throw stratakv::LogicError("Engine: unknown match id " +
                                  std::to_string(match_id));
     }
-    MatchResult match = std::move(it->second);
-    matches_.erase(it);
+    // Erase only after a successful submit: a throw (e.g. pre-start)
+    // must not strand the pinned match with no handle to release it.
+    MatchResult match = it->second;
     const TaskHandle handle =
-        engine_->SubmitGet(match, gpu_slots, gpu_state_slots);
+        Eng().SubmitGet(match, gpu_slots, gpu_state_slots);
+    matches_.erase(it);
     return handle.id();
   }
 
@@ -246,10 +409,12 @@ class PyEngine {
       throw stratakv::LogicError("Engine: unknown plan id " +
                                  std::to_string(plan_id));
     }
-    MetadataPlane::PutPlan plan = std::move(it->second);
-    plans_.erase(it);
+    // Same contract as SubmitGet: a failed submit leaves the staged
+    // plan abortable via abort_put.
+    MetadataPlane::PutPlan plan = it->second;
     const TaskHandle handle =
-        engine_->SubmitPut(plan, gpu_blocks, gpu_state_slots);
+        Eng().SubmitPut(plan, gpu_blocks, gpu_state_slots);
+    plans_.erase(it);
     return handle.id();
   }
 
@@ -263,7 +428,7 @@ class PyEngine {
     for (std::uint64_t id : ids) {
       handles.emplace_back(id);
     }
-    const auto result = engine_->TryWait(handles);
+    const auto result = Eng().TryWait(handles);
     std::vector<PyWaitItem> out;
     out.reserve(result.items.size());
     for (const auto& item : result.items) {
@@ -280,7 +445,7 @@ class PyEngine {
     for (std::uint64_t id : ids) {
       handles.emplace_back(id);
     }
-    const auto result = engine_->Wait(
+    const auto result = Eng().Wait(
         handles,
         std::chrono::milliseconds(static_cast<std::int64_t>(timeout_ms)));
     std::vector<PyWaitItem> out;
@@ -292,18 +457,23 @@ class PyEngine {
     return out;
   }
 
-  bool Cancel(std::uint64_t id) { return engine_->Cancel(TaskHandle(id)); }
+  bool Cancel(std::uint64_t id) { return Eng().Cancel(TaskHandle(id)); }
 
-  int CompletionFd() const { return engine_->CompletionFd(); }
+  int CompletionFd() { return Eng().CompletionFd(); }
 
-  void DrainCompletions() { engine_->DrainCompletions(); }
+  void DrainCompletions() { Eng().DrainCompletions(); }
 
   void Shutdown(double grace_ms) {
+    if (engine_ == nullptr) {
+      return;  // Nothing was ever started.
+    }
     engine_->Shutdown(
         std::chrono::milliseconds(static_cast<std::int64_t>(grace_ms)));
   }
 
-  std::uint32_t NumInFlight() const { return engine_->num_in_flight(); }
+  std::uint32_t NumInFlight() const {
+    return engine_ == nullptr ? 0 : engine_->num_in_flight();
+  }
   std::uint32_t FreeBlocks(std::uint32_t group) const {
     return plane_->num_free_blocks(group);
   }
@@ -311,10 +481,41 @@ class PyEngine {
     return plane_->num_free_states(group);
   }
 
+  /// \brief LRU eviction (engine-driven pressure relief; also used by
+  /// the benchmark's put loop). \return Blocks reclaimed.
+  std::uint32_t EvictBlocks(std::uint32_t max_blocks) {
+    return static_cast<std::uint32_t>(
+        plane_->EvictBlocks(max_blocks).blocks.size());
+  }
+
  private:
+  /// \brief Construct the TaskEngine over `executor` (inline
+  /// simulation or the real transport stack).
+  void StartEngine(std::shared_ptr<ITaskExecutor> executor) {
+    TaskEngineConfig engine_config;
+    engine_config.max_in_flight = config_.max_in_flight;
+    executor_ = std::move(executor);
+    engine_ = std::make_unique<TaskEngine>(plane_.get(), executor_,
+                                           engine_config);
+  }
+
+  PyEngineConfig config_;
+  bool gpu_mode_ = false;
+  // Declaration order fixes destruction order: the engine dies first,
+  // then the executor/scheduler/transport stack, then the tier and
+  // plane whose memory the transport touched.
   std::unique_ptr<ModelLayout> layout_;
-  std::shared_ptr<InlineExecutor> executor_;
   std::unique_ptr<MetadataPlane> plane_;
+  std::unique_ptr<DeviceMemoryRegistry> registry_ =
+      std::make_unique<DeviceMemoryRegistry>();
+  struct GpuRegistration {
+    DeviceMemoryRegistry::RegistrationId id;
+    std::uint32_t capacity_blocks;
+  };
+  std::vector<GpuRegistration> registrations_;
+  std::unique_ptr<CpuTier> tier_;
+  std::shared_ptr<TransferScheduler> scheduler_;
+  std::shared_ptr<ITaskExecutor> executor_;
   std::unique_ptr<TaskEngine> engine_;
   std::uint64_t next_id_ = 1;
   std::map<std::uint64_t, MatchResult> matches_;
@@ -339,6 +540,68 @@ PYBIND11_MODULE(_core, m) {
           };
         },
         "Return the supported per-group KV geometry kinds.");
+#if defined(STRATAKV_BINDINGS_GPU)
+  // Test/standalone device helpers ONLY (real adapters register
+  // engine-owned memory; StrataKV never allocates GPU memory for the
+  // engine — ADR 0005). Present == this module was built with
+  // STRATAKV_GPU (feature marker for the Python facade).
+  m.def("debug_alloc_device",
+        [](std::uint64_t bytes) -> std::uint64_t {
+          void* p = nullptr;
+          cudaError_t err = cudaMalloc(&p, bytes);
+          if (err != cudaSuccess) {
+            throw std::runtime_error(
+                std::string("debug_alloc_device: ") +
+                cudaGetErrorString(err));
+          }
+          return reinterpret_cast<std::uint64_t>(p);
+        },
+        py::arg("bytes"), "cudaMalloc for tests (returns raw address).");
+  m.def("debug_free_device",
+        [](std::uint64_t address) {
+          cudaError_t err = cudaFree(reinterpret_cast<void*>(address));
+          if (err != cudaSuccess) {
+            throw std::runtime_error(
+                std::string("debug_free_device: ") +
+                cudaGetErrorString(err));
+          }
+        },
+        py::arg("address"), "cudaFree for tests.");
+  m.def("debug_write_device",
+        [](std::uint64_t address, const py::bytes& data) {
+          const char* raw = PYBIND11_BYTES_AS_STRING(data.ptr());
+          const ssize_t size = PYBIND11_BYTES_SIZE(data.ptr());
+          if (raw == nullptr) {
+            throw std::runtime_error("debug_write_device: bad bytes");
+          }
+          cudaError_t err = cudaMemcpy(reinterpret_cast<void*>(address),
+                                       raw, static_cast<std::size_t>(size),
+                                       cudaMemcpyHostToDevice);
+          if (err != cudaSuccess) {
+            throw std::runtime_error(
+                std::string("debug_write_device: ") +
+                cudaGetErrorString(err));
+          }
+        },
+        py::arg("address"), py::arg("data"),
+        "Host bytes -> device (tests; synchronous).");
+  m.def("debug_read_device",
+        [](std::uint64_t address, std::uint64_t bytes) -> py::bytes {
+          std::string out;
+          out.resize(bytes);
+          cudaError_t err = cudaMemcpy(out.data(),
+                                       reinterpret_cast<void*>(address),
+                                       bytes, cudaMemcpyDeviceToHost);
+          if (err != cudaSuccess) {
+            throw std::runtime_error(
+                std::string("debug_read_device: ") +
+                cudaGetErrorString(err));
+          }
+          return py::bytes(out);
+        },
+        py::arg("address"), py::arg("bytes"),
+        "Device bytes -> host (tests; synchronous).");
+#endif  // STRATAKV_BINDINGS_GPU
   m.def("device_kinds",
         [] {
           return std::vector<std::string>{
@@ -381,7 +644,12 @@ PYBIND11_MODULE(_core, m) {
       .def_readwrite("state_object_bytes",
                      &PyEngineConfig::state_object_bytes)
       .def_readwrite("max_in_flight", &PyEngineConfig::max_in_flight)
-      .def_readwrite("inline_delay_ms", &PyEngineConfig::inline_delay_ms);
+      .def_readwrite("inline_delay_ms", &PyEngineConfig::inline_delay_ms)
+      .def_readwrite("use_gpu_transport",
+                     &PyEngineConfig::use_gpu_transport)
+      .def_readwrite("cpu_backing", &PyEngineConfig::cpu_backing)
+      .def_readwrite("transport_streams",
+                     &PyEngineConfig::transport_streams);
 
   py::class_<PyEngine::PyMatch>(m, "MatchInfo")
       .def_readonly("match_id", &PyEngine::PyMatch::match_id)
@@ -402,11 +670,27 @@ PYBIND11_MODULE(_core, m) {
 
   py::class_<PyEngine>(
       m, "Engine",
-      "Native StrataKV engine: MetadataPlane + TaskEngine driven "
-      "through the InlineExecutor simulation transport (Phase D; no "
-      "bytes are moved).")
+      "Native StrataKV engine: MetadataPlane + TaskEngine over either "
+      "the InlineExecutor simulation (default; no bytes moved) or — "
+      "with use_gpu_transport=True in a STRATAKV_GPU build — the real "
+      "CpuTier + CudaStreamTransport data plane (register_gpu_group + "
+      "start before submissions).")
       .def(py::init<std::vector<PyLayoutGroup>, PyEngineConfig>(),
            py::arg("groups"), py::arg("config") = PyEngineConfig{})
+#if defined(STRATAKV_BINDINGS_GPU)
+      .def("register_gpu_group", &PyEngine::RegisterGpuGroup,
+           py::arg("name"), py::arg("group"), py::arg("layout"),
+           py::arg("buffers"), py::arg("capacity_blocks"),
+           py::arg("device_id") = 0,
+           "Register one group's engine-owned GPU buffers as raw "
+           "(address, bytes) descriptors — torch stays at the adapter "
+           "(ADR 0005). 'layerwise': one buffer per layer; 'blockwise': "
+           "one flat buffer. Only before start().")
+      .def("start", &PyEngine::Start,
+           py::call_guard<py::gil_scoped_release>(),
+           "Build the data plane + TaskEngine (GIL released; device "
+           "allocations). Requires >= 1 GPU registration.")
+#endif
       .def("match", &PyEngine::Match, py::arg("token_ids"),
            "Pinned readiness-filtered match (GIL held; sub-ms budget). "
            "Returns MatchInfo; the pin lives until submit_get or "
@@ -447,5 +731,8 @@ PYBIND11_MODULE(_core, m) {
            "Cancel outstanding tasks and drain (GIL released).")
       .def("num_in_flight", &PyEngine::NumInFlight)
       .def("num_free_blocks", &PyEngine::FreeBlocks, py::arg("group"))
-      .def("num_free_states", &PyEngine::FreeStates, py::arg("group"));
+      .def("num_free_states", &PyEngine::FreeStates, py::arg("group"))
+      .def("evict_blocks", &PyEngine::EvictBlocks, py::arg("max_blocks"),
+           "Evict up to max_blocks LRU-first (engine-driven pressure "
+           "relief); returns blocks reclaimed. Works pre-start.");
 }

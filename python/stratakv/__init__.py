@@ -6,8 +6,10 @@ Typed, torch-free facade over the native core (pybind11 module
 - layout description (heterogeneous groups from day one, ADR 0003);
 - :class:`Engine` — match / stage_put / submit_put / submit_get /
   try_wait / wait / cancel / shutdown driving MetadataPlane + TaskEngine
-  through the InlineExecutor simulation transport (no bytes are moved;
-  Phase E installs the CUDA transport).
+  over either the InlineExecutor simulation (no bytes moved) or — with
+  ``EngineConfig.use_gpu_transport=True`` in a STRATAKV_GPU build — the
+  real CpuTier + CudaStreamTransport data plane
+  (:meth:`Engine.register_gpu_group` + :meth:`Engine.start`).
 
 The native module is optional at import time so that the package
 metadata stays importable in docs/CI shells, but :class:`Engine`
@@ -65,6 +67,19 @@ def device_kinds() -> list[str]:
     return list(_native.device_kinds()) if _native is not None else []
 
 
+# Test/standalone device helpers, present only in STRATAKV_GPU builds
+# (their presence is also the module-level marker for the real
+# transport path; real adapters register engine-owned memory and never
+# allocate GPU memory through StrataKV — ADR 0005).
+GPU_TRANSPORT_AVAILABLE = _native is not None and hasattr(
+    _native, "debug_alloc_device")
+if GPU_TRANSPORT_AVAILABLE:  # pragma: no cover - build-dependent
+    debug_alloc_device = _native.debug_alloc_device
+    debug_free_device = _native.debug_free_device
+    debug_write_device = _native.debug_write_device
+    debug_read_device = _native.debug_read_device
+
+
 @dataclasses.dataclass(frozen=True)
 class FullAttn:
     """Full-attention KV geometry (paged token blocks)."""
@@ -118,13 +133,24 @@ class LinearState:
 
 @dataclasses.dataclass
 class EngineConfig:
-    """Pool bounds + engine backpressure + simulation latency."""
+    """Pool bounds + engine backpressure + transport selection."""
 
     blocks_per_group: int = 1 << 20
     state_objects_per_group: int = 1024
     state_object_bytes: int = 1 << 16
     max_in_flight: int = 1024
     inline_delay_ms: int = 0  # Simulated per-op latency (testing only).
+    # Phase E: True wires the real data plane (CpuTier +
+    # CudaStreamTransport) instead of the InlineExecutor simulation —
+    # requires a STRATAKV_GPU build of the native module; the engine
+    # then requires register_gpu_group(...) + start() before
+    # submissions (match/stage/abort work pre-start).
+    use_gpu_transport: bool = False
+    # CPU tier page-locking: "pageable" | "pinned" | "registered".
+    # "pinned" (cudaMallocHost) is the only kernel-safe kind on WSL2
+    # (Phase 0 finding F4); GPU transport only.
+    cpu_backing: str = "pageable"
+    transport_streams: int = 2  # Transport stream pool (GPU only).
 
 
 @dataclasses.dataclass(frozen=True)
@@ -191,7 +217,39 @@ class Engine:
             cfg.state_object_bytes = config.state_object_bytes
             cfg.max_in_flight = config.max_in_flight
             cfg.inline_delay_ms = config.inline_delay_ms
+            cfg.use_gpu_transport = config.use_gpu_transport
+            cfg.cpu_backing = config.cpu_backing
+            cfg.transport_streams = config.transport_streams
         self._engine = _native.Engine(native_groups, cfg)
+
+    # ---- GPU data plane (STRATAKV_GPU builds; ADR 0005: raw
+    # descriptors, torch stays at the adapter) ----
+
+    def register_gpu_group(
+        self, name: str, group: int, buffers: Sequence[tuple[int, int]],
+        capacity_blocks: int, *, device_id: int = 0,
+        layout: str = "layerwise") -> int:
+        """Register one group's engine-owned GPU buffers.
+
+        ``buffers`` are raw ``(address, size_bytes)`` descriptors —
+        the adapter passes ``tensor.data_ptr()`` values, never torch
+        objects. ``layout='layerwise'`` takes one buffer per layer of
+        the group; ``'blockwise'`` takes one flat buffer.
+        ``capacity_blocks`` is the number of block ids (or state
+        slots) each buffer holds. Only before :meth:`start`.
+        """
+        native_buffers = [(int(a), int(s)) for a, s in buffers]
+        return self._engine.register_gpu_group(
+            name, int(group), layout, native_buffers, int(capacity_blocks),
+            int(device_id))
+
+    def start(self) -> None:
+        """Build the data plane + task engine (GIL released).
+
+        Requires at least one :meth:`register_gpu_group`; match/stage
+        calls work before this, submissions do not.
+        """
+        self._engine.start()
 
     # ---- match (GIL held; sub-ms budget) ----
 
@@ -282,3 +340,7 @@ class Engine:
 
     def num_free_states(self, group: int) -> int:
         return self._engine.num_free_states(group)
+
+    def evict_blocks(self, max_blocks: int) -> int:
+        """Evict up to ``max_blocks`` LRU-first; returns reclaimed."""
+        return self._engine.evict_blocks(int(max_blocks))

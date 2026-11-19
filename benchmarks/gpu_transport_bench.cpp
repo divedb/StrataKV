@@ -507,7 +507,6 @@ int main() {
     }
     // Gets: K matches pinned, K loads into disjoint slot ranges.
     {
-      const auto tokens = Tokens(64, 7);
       std::vector<double> per_task;
       per_task.reserve(kBatches);
       for (int batch = 0; batch < kBatches; ++batch) {

@@ -37,4 +37,11 @@ set_target_properties(stratakv_bindings PROPERTIES
 stratakv_target_defaults(stratakv_bindings)
 stratakv_target_warnings(stratakv_bindings)
 target_link_libraries(stratakv_bindings
-  PRIVATE stratakv_core stratakv_metadata stratakv_control)
+  PRIVATE stratakv_core stratakv_metadata stratakv_control stratakv_data)
+if (STRATAKV_GPU)
+  # Real data plane in Python: CudaStreamTransport + debug device
+  # helpers (guarded by STRATAKV_BINDINGS_GPU in the TU).
+  target_compile_definitions(stratakv_bindings PRIVATE
+    STRATAKV_BINDINGS_GPU=1)
+  target_link_libraries(stratakv_bindings PRIVATE CUDA::cudart)
+endif()

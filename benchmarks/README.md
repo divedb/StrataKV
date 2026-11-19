@@ -82,6 +82,28 @@ get ≈ 17.7 GB/s per task at 64 blocks. **Roadmap Phase E acceptance
 in-process mode** (the E4 isolation experiment still owes the
 isolated-process comparison).
 
+## gpu_transport_py_bench (Phase E — the Python layer, STRATA_GPU build)
+
+`benchmarks/gpu_transport_py_bench.py` drives the same real stack from
+Python through the typed facade (`register_gpu_group`/`start`,
+`stage_put`/`submit_put`/`wait`, `match`/`submit_get`/`wait`) at the
+same geometry — the delta vs `stratakv_gpu_transport_bench` prices
+exactly the pybind + facade layer the future vLLM connector pays per
+step. Byte-verified round trips precede every timed scenario.
+Requires the module built with `-DSTRATAKV_PYTHON=ON
+-DDSTRATAKV_GPU=ON`. Run: `PYTHONPATH=python python3
+benchmarks/gpu_transport_py_bench.py`.
+
+Baseline (WSL2 / RTX 4080 SUPER, CPython 3.12, 2026-11-19,
+`results/2026-11-19_wsl2_rtx4080super/gpu_transport_py_bench.log`):
+4-block sync p50 **put 200.4 µs / get 221.4 µs** vs C++ 184.8/194.6 —
+the Python layer adds only ~16–27 µs per task (acceptance bar PASS
+from Python, 4.5× headroom); intercepts 157.4/192.4 µs vs C++
+135.6/163.6. Match through the facade: 2.8 µs @1 block → 42.4 µs @64
+blocks — token-list conversion dominates at scale; the connector
+should pass numpy arrays eventually (design.md's facade sketch already
+anticipates `npt.NDArray` input).
+
 ## Phase A3 harness — not yet ported
 
 The reproducible end-to-end benchmark harness currently lives with the

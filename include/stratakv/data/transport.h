@@ -139,6 +139,11 @@ class TransportExecutor final : public stratakv::control::ITaskExecutor {
     return scheduler_->Cancel(owner);
   }
 
+  /// \brief Launch queued work (engine poll cadence — see
+  /// ITaskExecutor::Flush; without this, submitted tasks sit in the
+  /// scheduler's batch queue until the next poll).
+  void Flush() override { scheduler_->Flush(); }
+
  private:
   std::shared_ptr<TransferScheduler> scheduler_;
 };

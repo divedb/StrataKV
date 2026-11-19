@@ -40,3 +40,16 @@ Isolation trade-offs observed during the audit:
   torch pointer capture) to keep the contract identical.
 - Fault-injection tests are required before in-process can become the
   default anywhere.
+
+## Note added 2026-11-19 (E-Local probe)
+
+A cross-process CUDA IPC feasibility probe on the local WSL2 host
+(export via `cudaIpcGetMemHandle` succeeds; `cudaIpcOpenMemHandle` in
+a second process fails with "invalid resource handle", byte-verified
+two-way probe) shows **the isolated-process mode cannot be built or
+tested on WSL2** — consistent with NVIDIA's long-standing WSL IPC
+limitation. The E4 experiment therefore requires a native-Linux GPU
+host (the E0-class remote). The in-process measurement (Phase E
+acceptance: put 184.8 / get 194.6 µs at 4 blocks; Python layer +16–27
+µs) stands; the G2 decision keeps its interim isolated default until
+E4 runs there.

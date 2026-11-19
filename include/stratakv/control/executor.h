@@ -46,6 +46,14 @@ class ITaskExecutor {
     (void)owner;
     return false;
   }
+
+  /// \brief Launch any batched-but-unlaunched work. The engine calls
+  /// this at the top of every Wait/TryWait — the per-step launch point
+  /// (design.md diagram 2): adapters submit several tasks per
+  /// scheduler step and poll once, so batching happens between submit
+  /// and poll, one transport submission per step. Executors without
+  /// internal batching keep the no-op.
+  virtual void Flush() {}
 };
 
 /// \brief Synchronous simulation executor (no data movement).

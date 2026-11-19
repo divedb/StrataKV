@@ -90,5 +90,9 @@ Deviations and environment contracts (details and evidence in
    `cudaHostRegister` succeeds and `cudaDeviceReset` cannot recover a
    faulted context on this platform. The baseline harness probes this
    in a forked child before any parent CUDA state exists.
-4. Sanitizers are not applied to CUDA targets (nvcc device TUs do not
+4. **WSL2 CUDA IPC**: handle *export* (`cudaIpcGetMemHandle`) works,
+   but *cross-process open* (`cudaIpcOpenMemHandle` in another
+   process) fails — verified by a two-way probe (ADR 0002 note).
+   Isolated-process transport work must happen on a native-Linux host.
+5. Sanitizers are not applied to CUDA targets (nvcc device TUs do not
    support ASan/UBSan); CPU targets keep the sanitizer machinery.

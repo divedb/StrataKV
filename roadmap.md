@@ -193,7 +193,35 @@ the ~22–32 µs raw floor; log:
 `benchmarks/results/2026-11-19_wsl2_rtx4080super/gpu_transport_bench.log`).
 Remaining for E4 (gate G2): the isolated-process mode experiment and
 cross-process IPC verification, still queued with the Phase A ladder
-(remote-host items).)
+(remote-host items). A 2026-11-19 two-way probe on E-Local settled the
+platform question: CUDA IPC *export* works on WSL2 but cross-process
+*open* fails ("invalid resource handle") — the isolated mode cannot be
+built or tested here at all (ADR 0002 note); it requires a
+native-Linux GPU host.)
+
+**Python facade on the real data plane (2026-11-19, same day):**
+`EngineConfig.use_gpu_transport=True` (STRATAKV_PYTHON+STRATAKV_GPU
+builds) wires the full stack behind the facade —
+`register_gpu_group` (raw `(address, bytes)` descriptors per ADR 0005;
+torch stays at the adapter), `start()` (CpuTier + TierTable +
+CudaStreamTransport; match/stage work pre-start, submissions fail
+loudly until started), plus `evict_blocks` and debug device helpers
+(tests/standalone only; their presence marks the GPU build).
+Launch-point fix found by the facade work: submitted tasks previously
+sat in the scheduler's batch queue until an explicit scheduler-side
+Flush — `ITaskExecutor::Flush()` now fires at the top of every
+Wait/TryWait (the per-step launch cadence of design.md diagram 2; the
+drain-and-batch harvest: N submits per step, one flush per step).
+Binding wart fixed: failed submits no longer consume the match/plan
+id (staged entries stay abortable). Measured through the facade
+(`gpu_transport_py_bench`, log alongside the C++ one): 4-block sync
+p50 put 200.4 / get 221.4 µs — the pybind+facade layer costs ~16–27 µs
+over the C++ stack; acceptance bar PASS from Python. Match through
+the facade: 2.8 µs @1 block, 42.4 µs @64 (token-list conversion
+dominates at scale — numpy input noted for F1). Python suite: 14
+tests green incl. byte-verified round trips, the pre-start contract,
+and a GIL-heartbeat against REAL async completion (ADR 0004 evidence
+the InlineExecutor suite could not provide).
 
 **Goal:** GPU registration + tier transfers, benchmarked in both isolation modes per ADR 0002.
 
