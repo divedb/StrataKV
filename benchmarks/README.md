@@ -104,6 +104,34 @@ blocks — token-list conversion dominates at scale; the connector
 should pass numpy arrays eventually (design.md's facade sketch already
 anticipates `npt.NDArray` input).
 
+## Environments compared (2026-11-19: E-Local WSL2 vs E0 remote host)
+
+The remote E0-class host (RTX 3080 Ti, native Linux, driver 580.76.05,
+CUDA 12.8; StrataKV rsynced to `/root/autodl-tmp/StrataKV`, built
+Release/sm_86 — local repo remains the single source of truth) runs
+the same committed binaries; logs under
+`results/2026-11-19_remote_rtx3080ti/`:
+
+| metric (same harness, both PASS the ≤1 ms bar) | E-Local (WSL2, 4080 SUPER) | E0 host (native, 3080 Ti) |
+| --- | --- | --- |
+| pinned H2D / D2H peak | 22.0 / 24.0 GB/s | 12.3 / 12.5 GB/s (link-limited) |
+| D2D | 278 GB/s | 407 GB/s |
+| 4-block pinned/kernel sync (h2d/d2h) | 74.9 / 82.9 µs | 73.2 / 72.0 µs |
+| raw 0-byte intercept (h2d/d2h) | 31.9 / 15.4 µs | 9.5 / 8.3 µs |
+| empty CUDA task | 22.3 µs | **5.2 µs** |
+| full stack 4-block put/get | 184.8 / 194.6 µs | **147.3 / 152.4 µs** |
+| full-stack 0-byte intercept (put/get) | 135.6 / 163.6 µs | 103.3 / 111.0 µs |
+| SM access to `cudaHostRegister`'d memory | FAULTS (F4) | works |
+| cross-process CUDA IPC open | fails (ADR 0002 note) | **works** (E4 unblocked) |
+
+Two structural findings: the WSL2 GPU-PV path carries ~4× higher CUDA
+fixed costs than native (empty task 22.3 vs 5.2 µs — why the 3080 Ti
+*outscores* the faster-linked 4080 SUPER on the full stack despite
+half the bandwidth), and the F4 registered-memory constraint is
+WSL2-specific (native Linux runs registered+kernel scenarios fine;
+pageable+SM faults everywhere). The 3080 Ti's lower intercepts make it
+the better E4/isolation-mode substrate — as the roadmap assumed.
+
 ## Phase A3 harness — not yet ported
 
 The reproducible end-to-end benchmark harness currently lives with the

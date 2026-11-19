@@ -59,7 +59,7 @@ if (STRATAKV_GPU AND EXISTS "${PROJECT_SOURCE_DIR}/third_party/googletest/CMakeL
   target_compile_options(stratakv_gpu_tests PRIVATE -Wall -Wextra -Wshadow -Wunused)
   target_link_libraries(stratakv_gpu_tests PRIVATE stratakv_core
     stratakv_metadata stratakv_control stratakv_data stratakv::xxhash
-    gtest gtest_main)
+    CUDA::cudart gtest gtest_main)
   add_test(NAME stratakv_gpu_tests COMMAND stratakv_gpu_tests)
 endif()
 

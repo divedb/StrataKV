@@ -1,0 +1,11 @@
+# Cross-process CUDA IPC probe — remote E0 host (RTX 3080 Ti, native Linux)
+date: 2026-11-19T14:18:27Z
+
+child: cudaIpcOpenMemHandle: no error
+child: readback+sync: no error
+child: parent pattern bytes: OK
+child: write+sync: no error
+parent: cudaIpcGetMemHandle: no error
+parent: child exit 0
+parent: sees child's writes: OK
+PROBE RESULT: cross-process CUDA IPC WORKS on this platform

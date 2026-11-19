@@ -16,9 +16,11 @@ target_link_libraries(stratakv_index_bench PRIVATE stratakv::metadata)
 if(STRATAKV_GPU)
   add_executable(stratakv_gpu_baseline gpu_baseline_bench.cu)
   stratakv_target_defaults(stratakv_gpu_baseline)
-  target_compile_features(stratakv_gpu_baseline PRIVATE
-    cxx_std_20 cuda_std_20)
+  target_compile_features(stratakv_gpu_baseline PRIVATE cxx_std_20)
+  # Direct -std for CUDA TUs: keeps CMake 3.22 (project minimum) happy
+  # with CUDA 12 toolchains it predates.
   target_compile_options(stratakv_gpu_baseline PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-std=c++20>
     $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wshadow -Wunused>
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall,-Wextra,-Wshadow,-Wunused>)
   target_link_libraries(stratakv_gpu_baseline PRIVATE
@@ -37,4 +39,11 @@ if(STRATAKV_GPU)
     COMPILE_OPTIONS "-Wno-array-bounds")
   target_link_libraries(stratakv_gpu_transport_bench PRIVATE
     stratakv::control stratakv::data stratakv::xxhash CUDA::cudart)
+
+  # Cross-process CUDA IPC feasibility probe (E4 prerequisite, ADR
+  # 0002): environment documentation tool, not a ctest entry.
+  add_executable(stratakv_ipc_probe ipc_probe.cu)
+  target_compile_options(stratakv_ipc_probe PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-std=c++20 -Xcompiler=-Wall,-Wextra,-Wshadow,-Wunused>)
+  target_link_libraries(stratakv_ipc_probe PRIVATE CUDA::cudart)
 endif()

@@ -52,7 +52,7 @@ plane, and engineering rigor (testing, sanitizers, CI, docs).
 
 | ID | Contents | Purpose |
 | --- | --- | --- |
-| **E0** | Remote RTX 3080 Ti host; FlexKV v1.0.0 checkout; patched vLLM 0.10.1.1 `.venv`; `serve_qwen2_clean.py` harness | Historical control; flow tracing |
+| **E0** | Remote RTX 3080 Ti host; FlexKV v1.0.0 checkout; patched vLLM 0.10.1.1 `.venv`; `serve_qwen2_clean.py` harness | Historical control; flow tracing. **Live again (2026-11-19):** StrataKV builds/tests/benches there (logs `benchmarks/results/2026-11-19_remote_rtx3080ti/`; full stack 4-block put 147.3/get 152.4 µs — acceptance PASS; cross-process CUDA IPC works → E4 substrate). NOTE: the old FlexKV checkout/venvs are GONE (fresh container) — A1/A2 need environment reconstruction. |
 | **E1** | Same host; `git worktree` at **v1.2.1**; cloned `.venv` with flexkv repointed (vLLM patch identical) | Middle baseline: what did Sept→Dec 2025 recover? |
 | **E2** | Upstream FlexKV `main` + **vLLM ≥ 0.17.2** (unpatched, mainline connector); fresh venv; system deps (`liburing`, `libxxhash`, `libhiredis`) | Modern reference; the "adopt vs build" gate input |
 | **E-Local** | Local WSL2 host (RTX 4080 SUPER, sm_89, CUDA 12.0, driver 610.88; toolchain deviations in `docs/toolchains.md`) | Phase 0 raw-GPU floor + local dev GPU: `benchmarks/phase0_gpu_baseline.md` (recorded 2026-11-19; per-task fixed overhead ≈ 22–32 µs vs E0's 10–20 ms; WSL2 forbids SM access to registered/pageable host memory) |
@@ -192,12 +192,18 @@ get 194.6 µs sync p50; full-stack 0-byte intercept 135.6/163.6 µs vs
 the ~22–32 µs raw floor; log:
 `benchmarks/results/2026-11-19_wsl2_rtx4080super/gpu_transport_bench.log`).
 Remaining for E4 (gate G2): the isolated-process mode experiment and
-cross-process IPC verification, still queued with the Phase A ladder
-(remote-host items). A 2026-11-19 two-way probe on E-Local settled the
-platform question: CUDA IPC *export* works on WSL2 but cross-process
-*open* fails ("invalid resource handle") — the isolated mode cannot be
-built or tested here at all (ADR 0002 note); it requires a
-native-Linux GPU host.)
+cross-process IPC verification. **Unblocked 2026-11-19**: the E0 remote
+host is live again (rsync workflow, local repo as source of truth) —
+the in-tree IPC probe (`benchmarks/ipc_probe.cu`) verified cross-
+process CUDA IPC end to end there, and the remote runs the full stack
+FASTER than E-Local despite its half-bandwidth link (4-block put
+147.3/get 152.4 µs; native CUDA fixed costs ~4× lower than WSL2's —
+see the environment comparison in `benchmarks/README.md`). A 2026-11-19
+two-way probe on E-Local settled its platform question the other way:
+CUDA IPC *export* works on WSL2 but cross-process *open* fails — the
+isolated mode cannot be built or tested there (ADR 0002 notes). E4 =
+implement isolated-process mode on the remote + measure both modes +
+fault injection + finalize ADR 0002 at gate G2.)
 
 **Python facade on the real data plane (2026-11-19, same day):**
 `EngineConfig.use_gpu_transport=True` (STRATAKV_PYTHON+STRATAKV_GPU

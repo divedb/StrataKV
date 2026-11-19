@@ -63,7 +63,11 @@ if (STRATAKV_GPU)
   # Marks page-locked backings available to CpuTier/host_memory (the
   # CUDA TUs link cudart; host TUs in this target see the define).
   target_compile_definitions(stratakv_data PRIVATE STRATAKV_HAVE_CUDA=1)
-  target_compile_features(stratakv_data PRIVATE cuda_std_20)
+  # Direct -std (not the cuda_std_20 feature): CMake 3.22 — the
+  # project's declared minimum — predates CUDA 12 toolchains and
+  # rejects the feature name against them.
+  target_compile_options(stratakv_data
+    PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-std=c++20>)
   target_link_libraries(stratakv_data PRIVATE CUDA::cudart)
 endif()
 

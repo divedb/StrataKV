@@ -53,3 +53,15 @@ host (the E0-class remote). The in-process measurement (Phase E
 acceptance: put 184.8 / get 194.6 µs at 4 blocks; Python layer +16–27
 µs) stands; the G2 decision keeps its interim isolated default until
 E4 runs there.
+
+## Note added 2026-11-19 (E0-host probe, same day)
+
+The probe now exists in-tree (`benchmarks/ipc_probe.cu`) and was run
+on the E0-class remote (RTX 3080 Ti, native Linux, driver 580.76.05):
+**cross-process CUDA IPC works end to end** (child opened the handle,
+verified the parent's bytes, wrote its own pattern, parent observed
+it — log in `benchmarks/results/2026-11-19_remote_rtx3080ti/`). E4's
+isolated-process mode is implementable and testable there; the same
+host also runs the full stack faster than E-Local (4-block put 147.3 /
+get 152.4 µs — native CUDA fixed costs are ~4× lower than WSL2's,
+outweighing its half-bandwidth link).

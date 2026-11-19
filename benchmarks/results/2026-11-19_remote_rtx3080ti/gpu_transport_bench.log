@@ -1,0 +1,45 @@
+# StrataKV Phase E full-stack transport bench — remote E0 host (RTX 3080 Ti)
+date: 2026-11-19T14:17:05Z
+os: 5.4.0-162-generic | gcc 11.4 | CUDA 12.8 | driver 580.76.05
+
+== StrataKV full-stack transport bench ==
+device: NVIDIA GeForce RTX 3080 Ti (cc 8.6) | driver 13.0 | runtime 12.80
+block geometry: 24 layers x 8192 B = 196608 B | pinned CPU tier (kernel path) | in-process mode
+
+== SYNC mode: SubmitPut -> Wait per task ==
+task   blocks      bytes     p50_us     p95_us     p99_us     GB/s
+put         1     196608      144.6      161.9      197.2     1.36
+put         4     786432      147.3      193.3      263.1     5.34
+put        16    3145728      381.5      400.7      420.0     8.24
+put        64   12582912     1215.8     1272.2     1285.5    10.35
+get         1          -        1.2        1.2        1.2 (match only)
+get         4          -        2.0        2.0        2.0 (match only)
+get        16          -        4.6        6.2        7.4 (match only)
+get        64          -       15.0       15.1       15.5 (match only)
+get         1     196608      148.9      158.1      164.8     1.32
+get         4     786432      152.4      160.5      166.4     5.16
+get        16    3145728      383.5      394.3      405.3     8.20
+get        64   12582912     1183.8     1263.7     1276.5    10.63
+
+== PIPELINED mode (K=8 tasks, one flush + Wait; drain-and-batch shape) ==
+task   blocks  p50_us/task         GB/s
+put         1         41.7         4.71
+get         1         27.7         7.11
+put         4         82.6         9.52
+get         4         82.6         9.52
+put        16        286.7        10.97
+get        16        275.3        11.42
+put        64       1095.8        11.48
+get        64       1062.3        11.84
+
+== Per-task fixed overhead (0-byte intercept, sync p50) ==
+task     intercept_us    marginal_GB/s
+put             103.3            11.32
+get             111.0            11.73
+
+== References ==
+acceptance bar (roadmap E): per-task fixed overhead <= 1000 us at 4 blocks
+measured 4-block p50: put 147.3 us | get 152.4 us -> PASS (bar 1000 us)
+Phase 0 raw kernel floor (same box): h2d 74.9 / d2h 82.9 us at 4 blocks
+FlexKV v1.0.0 per-task (E0, remote 3080 Ti): 10850-21040 us at ~4 blocks
+verifications passed

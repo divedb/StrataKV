@@ -63,6 +63,30 @@ cmake --build build && ctest --test-dir build
 
 All configurations: 17/17 tests passing (2026-11-19).
 
+## Verified GPU build (E0 remote host, native Linux — 2026-11-19)
+
+Remote: autodl container, RTX 3080 Ti (sm_86), driver 580.76.05, CUDA
+toolkit **12.8** (the pin!), gcc 11.4.0, CMake 3.22.1, miniconda
+Python 3.12, 48 cores. The tree is rsynced from the local repository
+(the single source of truth) to `/root/autodl-tmp/StrataKV` — never
+edited remotely; helpers: `~/.ssh-helper/rssh.sh` (SSH) and
+`~/.ssh-helper/rrsync.sh` (incremental rsync, excludes builds/.git).
+
+```bash
+cmake -S . -B build-gpu -DCMAKE_BUILD_TYPE=Release -DSTRATAKV_GPU=ON \
+  -DCMAKE_CUDA_ARCHITECTURES=86
+cmake --build build-gpu -j && ctest --test-dir build-gpu
+```
+
+87 CPU + 6 GPU tests green; benchmark logs under
+`benchmarks/results/2026-11-19_remote_rtx3080ti/`. Two portability
+fixes this build forced (both kept for the declared minimums):
+`cuda_std_20` compile features replaced with direct `-std=c++20`
+(CMake 3.22 predates CUDA 12 toolchains), and the GPU test target
+links `CUDA::cudart` for the CUDA include path (worked locally only by
+accident of default search paths). gcc 11 builds the tree despite the
+documented gcc ≥ 12 guidance — noted, not yet re-doc'd as supported.
+
 ## Verified GPU build (WSL2, Phase 0 baseline session, 2026-11-19)
 
 Host: WSL2 kernel 6.6.87.2, RTX 4080 SUPER (sm_89), driver 610.88
