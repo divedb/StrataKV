@@ -74,7 +74,7 @@ class CpuTier {
   /// \throws std::invalid_argument on layout geometry violations
   /// (zero-sized blocks for token-addressable groups etc.),
   /// stratakv::LogicError on a page-locked backing in a CPU-only
-  /// build, and std::bad_alloc/std::runtime_error when the
+  /// build, and std::bad_alloc or std::runtime_error when the
   /// reservations cannot be made.
   CpuTier(const common::ModelLayout& layout, CpuTierConfig config);
 

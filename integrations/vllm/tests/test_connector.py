@@ -298,7 +298,7 @@ def test_worker_completion_polls_without_scheduler_output():
     from types import SimpleNamespace
     handle = SimpleNamespace(task_id=42)
     engine = SimpleNamespace(try_wait=lambda handles: [
-        (handle, "succeeded", "")])
+        (handle, "succeeded", "")], forget=lambda handle: True)
     connector = StrataKVConnectorV1.__new__(StrataKVConnectorV1)
     import threading
     connector._shared = SimpleNamespace(

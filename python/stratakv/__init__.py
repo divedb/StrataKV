@@ -335,6 +335,14 @@ class Engine:
         """Cancel outstanding tasks and drain (GIL released)."""
         self._engine.shutdown(grace_ms)
 
+    def metrics(self) -> dict:
+        """Coherent cumulative task counters and get/put latency histograms."""
+        return self._engine.metrics()
+
+    def forget(self, handle: TaskHandle) -> bool:
+        """Reclaim a terminal result after consuming it; drop pending callbacks."""
+        return self._engine.forget(handle.task_id)
+
     def num_in_flight(self) -> int:
         return self._engine.num_in_flight()
 

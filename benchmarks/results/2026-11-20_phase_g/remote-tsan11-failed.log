@@ -1,0 +1,326 @@
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- The C compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Could NOT find Python3 (missing: Python3_EXECUTABLE Interpreter) 
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /root/autodl-tmp/StrataKV/build-tsan
+[  2%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/types.cpp.o
+[  5%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/model_layout.cpp.o
+[  8%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/handles.cpp.o
+[ 11%] Building CXX object third_party/googletest-build/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[ 13%] Linking CXX static library libstratakv_core.a
+[ 13%] Built target stratakv_core
+[ 16%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/allocator.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/hasher.cpp.o
+[ 22%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/radix_index.cpp.o
+[ 25%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/metadata_plane.cpp.o
+[ 27%] Linking CXX static library libstratakv_metadata.a
+[ 27%] Built target stratakv_metadata
+[ 30%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/task_engine.cpp.o
+[ 33%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/executor.cpp.o
+[ 36%] Linking CXX static library ../../../lib/libgtest.a
+[ 36%] Built target gtest
+[ 38%] Building CXX object third_party/googletest-build/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 41%] Linking CXX static library ../../../lib/libgtest_main.a
+[ 41%] Built target gtest_main
+[ 44%] Linking CXX static library libstratakv_control.a
+[ 44%] Built target stratakv_control
+[ 47%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/cpu_tier.cpp.o
+[ 50%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/tier_table.cpp.o
+[ 52%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/registry.cpp.o
+[ 55%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/transport.cpp.o
+[ 58%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/host_memory.cpp.o
+[ 61%] Linking CXX static library libstratakv_data.a
+[ 61%] Built target stratakv_data
+[ 63%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/model_layout_test.cpp.o
+[ 66%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/types_test.cpp.o
+[ 69%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/allocator_test.cpp.o
+[ 72%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/radix_index_test.cpp.o
+[ 75%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/hasher_test.cpp.o
+[ 77%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/handles_test.cpp.o
+[ 80%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_plane_test.cpp.o
+[ 83%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_fuzz_test.cpp.o
+[ 86%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/task_engine_test.cpp.o
+[ 88%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/registry_test.cpp.o
+[ 91%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/cpu_tier_test.cpp.o
+[ 94%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/tier_table_test.cpp.o
+/root/autodl-tmp/StrataKV/tests/cpp/registry_test.cpp:35:13: warning: ‘stratakv::common::ModelLayout {anonymous}::Layout()’ defined but not used [-Wunused-function]
+   35 | ModelLayout Layout() {
+      |             ^~~~~~
+[ 97%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/transfer_scheduler_test.cpp.o
+[100%] Linking CXX executable stratakv_unit_tests
+[100%] Built target stratakv_unit_tests
+Internal ctest changing into directory: /root/autodl-tmp/StrataKV/build-tsan
+Test project /root/autodl-tmp/StrataKV/build-tsan
+    Start 1: stratakv_unit_tests
+1/1 Test #1: stratakv_unit_tests ..............***Failed    1.70 sec
+Running main() from /root/autodl-tmp/StrataKV/third_party/googletest/googletest/src/gtest_main.cc
+[==========] Running 94 tests from 25 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from DeviceKindTest
+[ RUN      ] DeviceKindTest.ToStringCoversAllKinds
+[       OK ] DeviceKindTest.ToStringCoversAllKinds (0 ms)
+[----------] 1 test from DeviceKindTest (0 ms total)
+
+[----------] 1 test from BufferViewTest
+[ RUN      ] BufferViewTest.ValidityChecks
+[       OK ] BufferViewTest.ValidityChecks (0 ms)
+[----------] 1 test from BufferViewTest (0 ms total)
+
+[----------] 4 tests from LayerSpecTest
+[ RUN      ] LayerSpecTest.SpecNames
+[       OK ] LayerSpecTest.SpecNames (0 ms)
+[ RUN      ] LayerSpecTest.TokenAddressability
+[       OK ] LayerSpecTest.TokenAddressability (0 ms)
+[ RUN      ] LayerSpecTest.BlockBytesMatchesAuditedGeometry
+[       OK ] LayerSpecTest.BlockBytesMatchesAuditedGeometry (0 ms)
+[ RUN      ] LayerSpecTest.ValidationRejectsMalformedSpecs
+[       OK ] LayerSpecTest.ValidationRejectsMalformedSpecs (0 ms)
+[----------] 4 tests from LayerSpecTest (0 ms total)
+
+[----------] 3 tests from ModelLayoutTest
+[ RUN      ] ModelLayoutTest.HomogeneousSingleGroup
+[       OK ] ModelLayoutTest.HomogeneousSingleGroup (0 ms)
+[ RUN      ] ModelLayoutTest.Qwen3NextShapedHybrid
+[       OK ] ModelLayoutTest.Qwen3NextShapedHybrid (0 ms)
+[ RUN      ] ModelLayoutTest.DeepSeekV4ShapedThreeGroups
+[       OK ] ModelLayoutTest.DeepSeekV4ShapedThreeGroups (0 ms)
+[----------] 3 tests from ModelLayoutTest (0 ms total)
+
+[----------] 1 test from ModelLayoutValidationTest
+[ RUN      ] ModelLayoutValidationTest.RejectsMalformedInputs
+[       OK ] ModelLayoutValidationTest.RejectsMalformedInputs (0 ms)
+[----------] 1 test from ModelLayoutValidationTest (0 ms total)
+
+[----------] 1 test from TaskHandleTest
+[ RUN      ] TaskHandleTest.DefaultInvalidAndEquality
+[       OK ] TaskHandleTest.DefaultInvalidAndEquality (0 ms)
+[----------] 1 test from TaskHandleTest (0 ms total)
+
+[----------] 1 test from TaskStateTest
+[ RUN      ] TaskStateTest.TerminalStates
+[       OK ] TaskStateTest.TerminalStates (0 ms)
+[----------] 1 test from TaskStateTest (0 ms total)
+
+[----------] 5 tests from CacheEntryTest
+[ RUN      ] CacheEntryTest.HomogeneousModelCompleteEntry
+[       OK ] CacheEntryTest.HomogeneousModelCompleteEntry (0 ms)
+[ RUN      ] CacheEntryTest.NotReadyEntryIsNeverComplete
+[       OK ] CacheEntryTest.NotReadyEntryIsNeverComplete (0 ms)
+[ RUN      ] CacheEntryTest.MissingSidecarStateViolatesInvariant
+[       OK ] CacheEntryTest.MissingSidecarStateViolatesInvariant (0 ms)
+[ RUN      ] CacheEntryTest.OutOfRangeGroupIndexRejected
+[       OK ] CacheEntryTest.OutOfRangeGroupIndexRejected (0 ms)
+[ RUN      ] CacheEntryTest.TokenAddressableGroupNeedsBlocks
+[       OK ] CacheEntryTest.TokenAddressableGroupNeedsBlocks (0 ms)
+[----------] 5 tests from CacheEntryTest (0 ms total)
+
+[----------] 4 tests from HasherTest
+[ RUN      ] HasherTest.CanonicalEmptyDigest
+[       OK ] HasherTest.CanonicalEmptyDigest (0 ms)
+[ RUN      ] HasherTest.StreamingMatchesOneShot
+[       OK ] HasherTest.StreamingMatchesOneShot (0 ms)
+[ RUN      ] HasherTest.ChunkedUpdatesEqualSingleUpdate
+[       OK ] HasherTest.ChunkedUpdatesEqualSingleUpdate (0 ms)
+[ RUN      ] HasherTest.ResetRestartsDigest
+[       OK ] HasherTest.ResetRestartsDigest (0 ms)
+[----------] 4 tests from HasherTest (0 ms total)
+
+[----------] 4 tests from GenBlockHashesTest
+[ RUN      ] GenBlockHashesTest.ChainedPrefixContract
+[       OK ] GenBlockHashesTest.ChainedPrefixContract (0 ms)
+[ RUN      ] GenBlockHashesTest.TrailingPartialBlockIgnored
+[       OK ] GenBlockHashesTest.TrailingPartialBlockIgnored (0 ms)
+[ RUN      ] GenBlockHashesTest.DeterministicAcrossCalls
+[       OK ] GenBlockHashesTest.DeterministicAcrossCalls (0 ms)
+[ RUN      ] GenBlockHashesTest.RejectsZeroTokensPerBlock
+[       OK ] GenBlockHashesTest.RejectsZeroTokensPerBlock (0 ms)
+[----------] 4 tests from GenBlockHashesTest (0 ms total)
+
+[----------] 6 tests from BlockAllocatorTest
+[ RUN      ] BlockAllocatorTest.SequentialBatchAllocation
+[       OK ] BlockAllocatorTest.SequentialBatchAllocation (0 ms)
+[ RUN      ] BlockAllocatorTest.ExhaustionThrows
+[       OK ] BlockAllocatorTest.ExhaustionThrows (0 ms)
+[ RUN      ] BlockAllocatorTest.ReleaseThenReuseAfterMaterialization
+[       OK ] BlockAllocatorTest.ReleaseThenReuseAfterMaterialization (0 ms)
+[ RUN      ] BlockAllocatorTest.DoubleRecycleIsLoud
+[       OK ] BlockAllocatorTest.DoubleRecycleIsLoud (0 ms)
+[ RUN      ] BlockAllocatorTest.OutOfRangeReleaseRejected
+[       OK ] BlockAllocatorTest.OutOfRangeReleaseRejected (0 ms)
+[ RUN      ] BlockAllocatorTest.ZeroRejects
+[       OK ] BlockAllocatorTest.ZeroRejects (0 ms)
+[----------] 6 tests from BlockAllocatorTest (0 ms total)
+
+[----------] 3 tests from StatePoolTest
+[ RUN      ] StatePoolTest.AcquireReleaseRoundTrip
+[       OK ] StatePoolTest.AcquireReleaseRoundTrip (0 ms)
+[ RUN      ] StatePoolTest.DoubleReleaseIsLoud
+[       OK ] StatePoolTest.DoubleReleaseIsLoud (0 ms)
+[ RUN      ] StatePoolTest.AccountingFields
+[       OK ] StatePoolTest.AccountingFields (0 ms)
+[----------] 3 tests from StatePoolTest (0 ms total)
+
+[----------] 1 test from RadixIndexGoldenTest
+[ RUN      ] RadixIndexGoldenTest.FlexKVScenarioMatchLengthsAndEviction
+[       OK ] RadixIndexGoldenTest.FlexKVScenarioMatchLengthsAndEviction (1 ms)
+[----------] 1 test from RadixIndexGoldenTest (1 ms total)
+
+[----------] 12 tests from RadixIndexTest
+[ RUN      ] RadixIndexTest.ColdMissIsEmpty
+[       OK ] RadixIndexTest.ColdMissIsEmpty (0 ms)
+[ RUN      ] RadixIndexTest.MidNodePartialMatchBinarySearch
+[       OK ] RadixIndexTest.MidNodePartialMatchBinarySearch (0 ms)
+[ RUN      ] RadixIndexTest.ReadinessFiltersUntilCommit
+[       OK ] RadixIndexTest.ReadinessFiltersUntilCommit (0 ms)
+[ RUN      ] RadixIndexTest.ConservativeCommitDoesNotOverMarkAncestors
+[       OK ] RadixIndexTest.ConservativeCommitDoesNotOverMarkAncestors (0 ms)
+[ RUN      ] RadixIndexTest.CommitReadyUnknownEntryThrows
+[       OK ] RadixIndexTest.CommitReadyUnknownEntryThrows (0 ms)
+[ RUN      ] RadixIndexTest.InsertFullyPresentReturnsNull
+[       OK ] RadixIndexTest.InsertFullyPresentReturnsNull (0 ms)
+[ RUN      ] RadixIndexTest.InsertValidatesRefShape
+[       OK ] RadixIndexTest.InsertValidatesRefShape (0 ms)
+[ RUN      ] RadixIndexTest.PinsBlockEvictionUntilRelease
+[       OK ] RadixIndexTest.PinsBlockEvictionUntilRelease (0 ms)
+[ RUN      ] RadixIndexTest.SplitPreservesAllBranches
+[       OK ] RadixIndexTest.SplitPreservesAllBranches (0 ms)
+[ RUN      ] RadixIndexTest.GraceTimeProtectsYoungLeaves
+[       OK ] RadixIndexTest.GraceTimeProtectsYoungLeaves (0 ms)
+[ RUN      ] RadixIndexTest.ResetClearsEverything
+[       OK ] RadixIndexTest.ResetClearsEverything (0 ms)
+[ RUN      ] RadixIndexTest.LayoutInvariantsEnforced
+[       OK ] RadixIndexTest.LayoutInvariantsEnforced (0 ms)
+[----------] 12 tests from RadixIndexTest (4 ms total)
+
+[----------] 4 tests from RadixIndexHybridTest
+[ RUN      ] RadixIndexHybridTest.MatchTruncatesToCompleteBundleBoundary
+[       OK ] RadixIndexHybridTest.MatchTruncatesToCompleteBundleBoundary (0 ms)
+[ RUN      ] RadixIndexHybridTest.UnreadyBundleIsNotServable
+[       OK ] RadixIndexHybridTest.UnreadyBundleIsNotServable (0 ms)
+[ RUN      ] RadixIndexHybridTest.HybridInsertRequiresStates
+[       OK ] RadixIndexHybridTest.HybridInsertRequiresStates (0 ms)
+[ RUN      ] RadixIndexHybridTest.StateNodesEvictWholeNeverShrink
+[       OK ] RadixIndexHybridTest.StateNodesEvictWholeNeverShrink (0 ms)
+[----------] 4 tests from RadixIndexHybridTest (1 ms total)
+
+[----------] 5 tests from MetadataPlaneTest
+[ RUN      ] MetadataPlaneTest.PutGetLifecycle
+[       OK ] MetadataPlaneTest.PutGetLifecycle (0 ms)
+[ RUN      ] MetadataPlaneTest.StagePutReservesAndEvictRecycles
+[       OK ] MetadataPlaneTest.StagePutReservesAndEvictRecycles (0 ms)
+[ RUN      ] MetadataPlaneTest.ExhaustionLeavesNothingReserved
+[       OK ] MetadataPlaneTest.ExhaustionLeavesNothingReserved (0 ms)
+[ RUN      ] MetadataPlaneTest.PinsSurviveEvictionAttempt
+[       OK ] MetadataPlaneTest.PinsSurviveEvictionAttempt (0 ms)
+[ RUN      ] MetadataPlaneTest.NullIndexRejected
+[       OK ] MetadataPlaneTest.NullIndexRejected (0 ms)
+[----------] 5 tests from MetadataPlaneTest (2 ms total)
+
+[----------] 1 test from MetadataPlaneHybridTest
+[ RUN      ] MetadataPlaneHybridTest.StagePutReservesStatesPerGroup
+[       OK ] MetadataPlaneHybridTest.StagePutReservesStatesPerGroup (0 ms)
+[----------] 1 test from MetadataPlaneHybridTest (0 ms total)
+
+[----------] 4 tests from MetadataFuzzTest
+[ RUN      ] MetadataFuzzTest.ExactOracleNoEvict_Homogeneous
+[       OK ] MetadataFuzzTest.ExactOracleNoEvict_Homogeneous (34 ms)
+[ RUN      ] MetadataFuzzTest.ExactOracleNoEvict_Hybrid
+[       OK ] MetadataFuzzTest.ExactOracleNoEvict_Hybrid (32 ms)
+[ RUN      ] MetadataFuzzTest.InvariantsWithEvict_Homogeneous
+[       OK ] MetadataFuzzTest.InvariantsWithEvict_Homogeneous (50 ms)
+[ RUN      ] MetadataFuzzTest.InvariantsWithEvict_Hybrid
+[       OK ] MetadataFuzzTest.InvariantsWithEvict_Hybrid (48 ms)
+[----------] 4 tests from MetadataFuzzTest (165 ms total)
+
+[----------] 10 tests from TaskEngineTest
+[ RUN      ] TaskEngineTest.PutGetLifecycleWithMetadataEffects
+[       OK ] TaskEngineTest.PutGetLifecycleWithMetadataEffects (1 ms)
+[ RUN      ] TaskEngineTest.FullyMatchedGetIsZeroOpSuccess
+[       OK ] TaskEngineTest.FullyMatchedGetIsZeroOpSuccess (0 ms)
+[ RUN      ] TaskEngineTest.SubmitValidation
+[       OK ] TaskEngineTest.SubmitValidation (0 ms)
+[ RUN      ] TaskEngineTest.BackpressureRejectsThenRecovers
+[       OK ] TaskEngineTest.BackpressureRejectsThenRecovers (1 ms)
+[ RUN      ] TaskEngineTest.CancelPutKeepsStagedEntryUntilAbort
+[       OK ] TaskEngineTest.CancelPutKeepsStagedEntryUntilAbort (0 ms)
+[ RUN      ] TaskEngineTest.OpFailureFailsTaskAndReleasesPins
+[       OK ] TaskEngineTest.OpFailureFailsTaskAndReleasesPins (1 ms)
+[ RUN      ] TaskEngineTest.WaitTimeoutLeavesTaskPending
+[       OK ] TaskEngineTest.WaitTimeoutLeavesTaskPending (30 ms)
+[ RUN      ] TaskEngineTest.CompletionFdSignalsAndDrainDispatches
+[       OK ] TaskEngineTest.CompletionFdSignalsAndDrainDispatches (1 ms)
+[ RUN      ] TaskEngineTest.StressTenKTasksWithRandomCancels
+[       OK ] TaskEngineTest.StressTenKTasksWithRandomCancels (627 ms)
+[ RUN      ] TaskEngineTest.ShutdownMidFlightCancelsAndIsIdempotent
+[       OK ] TaskEngineTest.ShutdownMidFlightCancelsAndIsIdempotent (2 ms)
+[----------] 10 tests from TaskEngineTest (668 ms total)
+
+[----------] 5 tests from TaskEngineHardeningTest
+[ RUN      ] TaskEngineHardeningTest.ConcurrentSnapshotsAndRecordReclamation
+[       OK ] TaskEngineHardeningTest.ConcurrentSnapshotsAndRecordReclamation (638 ms)
+[ RUN      ] TaskEngineHardeningTest.FailureCancelRejectionAndForget
+[       OK ] TaskEngineHardeningTest.FailureCancelRejectionAndForget (2 ms)
+[ RUN      ] TaskEngineHardeningTest.RepeatedConstructionAndShutdown
+[       OK ] TaskEngineHardeningTest.RepeatedConstructionAndShutdown (54 ms)
+[ RUN      ] TaskEngineHardeningTest.ConcurrentCompletionCancellationAndPolling
+==================
+WARNING: ThreadSanitizer: double lock of a mutex (pid=17625)
+    #0 pthread_mutex_lock ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:4240 (libtsan.so.0+0x53908)
+    #1 __gthread_mutex_lock /usr/include/x86_64-linux-gnu/c++/11/bits/gthr-default.h:749 (stratakv_unit_tests+0x97f45)
+    #2 std::mutex::lock() /usr/include/c++/11/bits/std_mutex.h:100 (stratakv_unit_tests+0x980b4)
+    #3 std::lock_guard<std::mutex>::lock_guard(std::mutex&) /usr/include/c++/11/bits/std_mutex.h:229 (stratakv_unit_tests+0x99a5e)
+    #4 stratakv::control::TaskEngine::OnOpCompleted(unsigned long, bool) /root/autodl-tmp/StrataKV/src/control/task_engine.cpp:542 (stratakv_unit_tests+0x16a79a)
+    #5 Pump /root/autodl-tmp/StrataKV/tests/cpp/task_engine_test.cpp:120 (stratakv_unit_tests+0x81fc5)
+    #6 PumpAll /root/autodl-tmp/StrataKV/tests/cpp/task_engine_test.cpp:127 (stratakv_unit_tests+0x82061)
+    #7 operator() /root/autodl-tmp/StrataKV/tests/cpp/task_engine_test.cpp:562 (stratakv_unit_tests+0x8eb02)
+    #8 __invoke_impl<void, (anonymous namespace)::TaskEngineHardeningTest_ConcurrentCompletionCancellationAndPolling_Test::TestBody()::<lambda()> > /usr/include/c++/11/bits/invoke.h:61 (stratakv_unit_tests+0x97489)
+    #9 __invoke<(anonymous namespace)::TaskEngineHardeningTest_ConcurrentCompletionCancellationAndPolling_Test::TestBody()::<lambda()> > /usr/include/c++/11/bits/invoke.h:96 (stratakv_unit_tests+0x9724f)
+    #10 _M_invoke<0> /usr/include/c++/11/bits/std_thread.h:259 (stratakv_unit_tests+0x97018)
+    #11 operator() /usr/include/c++/11/bits/std_thread.h:266 (stratakv_unit_tests+0x96e86)
+    #12 _M_run /usr/include/c++/11/bits/std_thread.h:211 (stratakv_unit_tests+0x95fec)
+    #13 <null> <null> (libstdc++.so.6+0xdc252)
+
+  Location is heap block of size 560 at 0x7b5400000280 allocated by main thread:
+    #0 operator new(unsigned long) ../../../../src/libsanitizer/tsan/tsan_new_delete.cpp:64 (libtsan.so.0+0x8f162)
+    #1 std::_MakeUniq<stratakv::control::TaskEngine::Impl>::__single_object std::make_unique<stratakv::control::TaskEngine::Impl>() /usr/include/c++/11/bits/unique_ptr.h:962 (stratakv_unit_tests+0x170436)
+    #2 stratakv::control::TaskEngine::TaskEngine(stratakv::metadata::MetadataPlane*, std::shared_ptr<stratakv::control::ITaskExecutor>, stratakv::control::TaskEngineConfig) /root/autodl-tmp/StrataKV/src/control/task_engine.cpp:150 (stratakv_unit_tests+0x166288)
+    #3 TestBody /root/autodl-tmp/StrataKV/tests/cpp/task_engine_test.cpp:554 (stratakv_unit_tests+0x8ed8f)
+    #4 void testing::internal::HandleSehExceptionsInMethodIfSupported<testing::Test, void>(testing::Test*, void (testing::Test::*)(), char const*) /root/autodl-tmp/StrataKV/third_party/googletest/googletest/src/gtest.cc:2612 (stratakv_unit_tests+0x151a00)
+
+  Mutex M2086 (0x7b54000002a0) created at:
+    #0 pthread_mutex_lock ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:4240 (libtsan.so.0+0x53908)
+    #1 __gthread_mutex_lock /usr/include/x86_64-linux-gnu/c++/11/bits/gthr-default.h:749 (stratakv_unit_tests+0x97f45)
+    #2 std::mutex::lock() /usr/include/c++/11/bits/std_mutex.h:100 (stratakv_unit_tests+0x980b4)
+    #3 std::lock_guard<std::mutex>::lock_guard(std::mutex&) /usr/include/c++/11/bits/std_mutex.h:229 (stratakv_unit_tests+0x99a5e)
+    #4 stratakv::control::TaskEngine::Submit(stratakv::control::TransferGraph, bool, stratakv::metadata::MatchResult, stratakv::metadata::MetadataPlane::PutPlan) /root/autodl-tmp/StrataKV/src/control/task_engine.cpp:301 (stratakv_unit_tests+0x167b97)
+    #5 stratakv::control::TaskEngine::SubmitPut(stratakv::metadata::MetadataPlane::PutPlan, std::span<unsigned int const, 18446744073709551615ul>, std::span<unsigned int const, 18446744073709551615ul>) /root/autodl-tmp/StrataKV/src/control/task_engine.cpp:290 (stratakv_unit_tests+0x1678d7)
+    #6 TestBody /root/autodl-tmp/StrataKV/tests/cpp/task_engine_test.cpp:559 (stratakv_unit_tests+0x8ef3c)
+    #7 void testing::internal::HandleSehExceptionsInMethodIfSupported<testing::Test, void>(testing::Test*, void (testing::Test::*)(), char const*) /root/autodl-tmp/StrataKV/third_party/googletest/googletest/src/gtest.cc:2612 (stratakv_unit_tests+0x151a00)
+
+SUMMARY: ThreadSanitizer: double lock of a mutex /usr/include/x86_64-linux-gnu/c++/11/bits/gthr-default.h:749 in __gthread_mutex_lock
+==================
+
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   1.71 sec
+
+The following tests FAILED:
+	  1 - stratakv_unit_tests (Failed)
+Errors while running CTest

@@ -701,6 +701,25 @@ TEST(GpuIsolatedTest, WorkerKillFailsOpsButEngineSurvives) {
   EXPECT_EQ(engine.num_in_flight(), 0u);
   engine.Shutdown(std::chrono::milliseconds(1000));
   scheduler->Shutdown(std::chrono::milliseconds(1000));
+
+  // Recovery is explicit: a dead transport is not reused. A fresh worker
+  // can register the still-live engine allocations and accept new work.
+  (void)plane.AbortPut(plan.entry);
+  auto restarted = TryMakeIsolatedClient(layout, kCapacity, descriptor,
+                                        kCapacity, &skip_reason);
+  ASSERT_NE(restarted, nullptr);
+  auto fresh_scheduler = std::make_shared<TransferScheduler>(
+      std::move(restarted), IsolationMode::kIsolatedProcess,
+      TransferScheduler::Config());
+  TaskEngine fresh_engine(&plane,
+                         std::make_shared<TransportExecutor>(fresh_scheduler));
+  const auto fresh_plan = plane.StagePut(std::vector<TokenId>(16, TokenId{77}));
+  const auto fresh_put = fresh_engine.SubmitPut(fresh_plan, std::vector<BlockId>{0});
+  const auto recovered = fresh_engine.Wait(
+      std::span<const TaskHandle>(&fresh_put, 1), std::chrono::milliseconds(5000));
+  EXPECT_EQ(recovered.items.at(0).state, TaskState::kSucceeded);
+  fresh_engine.Shutdown(std::chrono::milliseconds(1000));
+  fresh_scheduler->Shutdown(std::chrono::milliseconds(1000));
 }
 
 }  // namespace

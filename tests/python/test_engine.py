@@ -203,3 +203,32 @@ def test_pools_exhaustion_raises():
     engine.stage_put(TOKENS)  # 4 blocks — pools now empty.
     with pytest.raises(stratakv.NotEnoughSpaceError):
         engine.stage_put([9, 10, 11, 12])
+
+
+def test_metrics_export_and_terminal_record_reclamation():
+    from stratakv.metrics import prometheus_text
+
+    engine = homogeneous_engine()
+    try:
+        plan = engine.stage_put(TOKENS)
+        put = engine.submit_put(plan, gpu_blocks=[0, 1, 2, 3])
+        assert engine.wait([put])[0][1] == "succeeded"
+        assert engine.forget(put)
+        assert not engine.forget(put)
+        match = engine.match(TOKENS)
+        get = engine.submit_get(match, gpu_slots=[4, 5, 6, 7])
+        assert engine.wait([get])[0][1] == "succeeded"
+        assert engine.forget(get)
+        snapshot = engine.metrics()
+        assert snapshot["submitted_puts"] == snapshot["submitted_gets"] == 1
+        assert snapshot["succeeded"] == 2
+        assert snapshot["retained_tasks"] == snapshot["in_flight"] == 0
+        for direction in ("get", "put"):
+            hist = snapshot[f"{direction}_latency"]
+            assert sum(hist["buckets"]) == hist["count"] == 1
+            assert hist["sum_seconds"] >= 0
+        exported = prometheus_text(snapshot)
+        assert 'stratakv_task_get_duration_seconds_bucket{le="+Inf"} 1' in exported
+        assert "stratakv_tasks_succeeded_total 2\n" in exported
+    finally:
+        engine.shutdown()

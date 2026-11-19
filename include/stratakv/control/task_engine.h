@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -38,6 +39,25 @@ struct TaskEngineConfig {
 
   /// \brief Max ops in one task graph (guards op-id packing).
   std::uint32_t max_ops_per_task = 1u << 20;
+};
+
+/// \brief Cumulative, non-resetting task metrics. Snapshots are coherent under the
+/// engine mutex. Latency measures accepted submission to terminal transition,
+/// including batching delay; it is not CUDA kernel time.
+struct TaskMetrics {
+  static constexpr std::array<std::uint64_t, 7> bounds_us = {
+      1, 10, 100, 1000, 10000, 100000, 1000000};
+  struct Latency {
+    // Disjoint buckets; the last is +Inf. Exporters accumulate them.
+    std::array<std::uint64_t, 8> buckets{};
+    std::uint64_t count = 0;
+    double sum_seconds = 0;
+  };
+  std::uint64_t submitted_gets = 0, submitted_puts = 0;
+  std::uint64_t succeeded = 0, failed = 0, cancelled = 0;
+  std::uint64_t rejected = 0;
+  std::uint64_t in_flight = 0, peak_in_flight = 0, retained_tasks = 0;
+  Latency get_latency, put_latency;
 };
 
 /// \brief Central task engine: staging, launch, completion,
@@ -83,8 +103,7 @@ class TaskEngine final : public CompletionSink {
   /// \throws NotEnoughSpaceError on backpressure; std::invalid_argument
   /// on slot-count mismatch; LogicError after Shutdown.
   common::TaskHandle SubmitGet(
-      metadata::MatchResult match,
-      std::span<const common::BlockId> gpu_slots,
+      metadata::MatchResult match, std::span<const common::BlockId> gpu_slots,
       std::span<const std::uint32_t> gpu_state_slots = {});
 
   /// \brief Stage + launch an offload of a finished request's
@@ -146,6 +165,14 @@ class TaskEngine final : public CompletionSink {
 
   /// \brief Tasks currently in Staged+Launched.
   std::uint32_t num_in_flight() const;
+
+  /// \brief Snapshot counters and bounded latency histograms without flushing work.
+  TaskMetrics Metrics() const;
+
+  /// \brief Reclaim a terminal task record after consuming its result. Returns false
+  /// for unknown or active tasks. Pending callback delivery is discarded.
+  /// Afterwards Wait/TryWait report an unknown handle. IDs are never reused.
+  bool Forget(common::TaskHandle handle);
 
   /// \brief CompletionSink delivery (executor threads).
   void OnOpCompleted(std::uint64_t op_id, bool ok) override;

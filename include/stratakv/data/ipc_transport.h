@@ -54,7 +54,6 @@ class IpcTransportClient final : public ITransport {
   /// outlive nothing — copied onto the wire).
   /// \param tier_config CPU tier sizing for the WORKER's allocation
   /// (must match the engine-side MetadataPlaneConfig id spaces).
-  /// \param config Spawn/timeout options.
   ///
   /// \throws stratakv::LogicError when the worker cannot start or
   /// reports a setup failure (CUDA IPC unsupported carries a stable
@@ -64,6 +63,10 @@ class IpcTransportClient final : public ITransport {
   /// args).
   IpcTransportClient(const common::ModelLayout& layout,
                      CpuTierConfig tier_config);
+  /// \brief Spawn with explicit options.
+  /// \param layout Model description, copied onto the wire.
+  /// \param tier_config Worker CPU tier sizing.
+  /// \param config Spawn/timeout options.
   IpcTransportClient(const common::ModelLayout& layout,
                      CpuTierConfig tier_config, Config config);
   ~IpcTransportClient() override;

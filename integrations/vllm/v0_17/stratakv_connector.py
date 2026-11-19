@@ -651,11 +651,13 @@ class StrataKVConnectorV1(HybridSidecarMixin, _VllmBase):
         for request_id, handle in list(shared.pending_gets.items()):
             if results.get(handle.task_id) == "succeeded":
                 shared.pending_gets.pop(request_id)
+                shared.engine.forget(handle)
                 with shared.lock:
                     shared.finished_recving.add(request_id)
         for request_id, handle in list(shared.pending_puts.items()):
             if results.get(handle.task_id) == "succeeded":
                 shared.pending_puts.pop(request_id)
+                shared.engine.forget(handle)
                 shared.release_state_slot(request_id)
                 with shared.lock:
                     shared.finished_sending.add(request_id)

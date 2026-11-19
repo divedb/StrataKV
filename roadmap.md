@@ -244,6 +244,36 @@ the vLLM installation is now available.
 
 ### Phase G — Hardening and release
 
+**Status: G1 ✅ / G2 ✅ / G3 ◐ / G4 ◐ (2026-11-20)** — CPU
+ASan+UBSan with leak detection passes locally; GCC 12 ThreadSanitizer
+passes the complete CPU suite on native Linux. CI now has a separate
+GCC 12 TSan job (hosted execution still pending). GCC 13 TSan cannot
+start on the local host (`unexpected memory mapping`); the remote GCC
+11 runtime reported a mutex error, while the GCC 12 run passes without
+suppressions. Use the validated GCC 12 configuration.
+
+G2 adds concurrent submit/snapshot/drain/reclamation and completion/cancel
+stress, repeated engine construction/shutdown, registration churn, and
+explicit fresh-worker recovery after SIGKILL. Terminal records can now be
+reclaimed with C++ `Forget` / Python `forget`; the vLLM connector consumes
+and forgets completed transfers. Completion drains retain their dispatcher
+and terminal-state snapshot across concurrent replacement/reclamation.
+
+G3 implements coherent cumulative counters (submission, outcome,
+rejection, active/peak/retained tasks), bounded get/put submission-to-terminal
+latency histograms, Python snapshots, and dependency-free Prometheus text
+export. Finer metadata-match and transport-stage histograms remain open;
+task latency includes batching and is not kernel timing.
+
+G4 adds optional Doxygen generation and a CI documentation artifact,
+[API/ownership and metrics guide](docs/api.md),
+[hardening instructions](docs/hardening.md), [ADR index](docs/README.md),
+and an unreleased CHANGELOG. Release/tag remains pending Phase A's
+baseline decision, F4 real hybrid-model validation, and the remaining G3
+instrumentation. No v0.1.0 release is claimed.
+
+Validation evidence: [Phase G report](docs/phase-g-validation.md).
+
 | # | Task | Deliverable | Size |
 | --- | --- | --- | --- |
 | G1 | Sanitizers on CPU paths in CI; race detector on task engine | CI jobs | M |
@@ -262,7 +292,7 @@ the vLLM installation is now available.
 | M2 ✅ | B complete: skeleton + object model + CI | build/test green |
 | M3 ✅ | C+D complete: metadata + control plane, CPU-only | index parity + engine stress pass |
 | M4 ✅ | E1–E4: data plane + isolation experiment | **G2** isolation decision with numbers (ADR 0002 final: isolated default, +~50 µs/task premium, fault containment proven) |
-| M5 | F1–F2: vLLM parity on full attention | byte-exact reload, workload parity |
+| M5 ✅ | F1–F2: vLLM parity on full attention | byte-exact reload, workload parity |
 | M6 | F3–F4 + G: hybrid + hardening | v0.1.0 |
 
 Sequencing rule: no phase starts before the previous gate is written. If

@@ -476,6 +476,33 @@ class PyEngine {
         std::chrono::milliseconds(static_cast<std::int64_t>(grace_ms)));
   }
 
+  bool Forget(std::uint64_t id) { return Eng().Forget(TaskHandle(id)); }
+
+  py::dict Metrics() {
+    const auto snapshot = Eng().Metrics();
+    py::dict out;
+    out["submitted_gets"] = snapshot.submitted_gets;
+    out["submitted_puts"] = snapshot.submitted_puts;
+    out["succeeded"] = snapshot.succeeded;
+    out["failed"] = snapshot.failed;
+    out["cancelled"] = snapshot.cancelled;
+    out["rejected"] = snapshot.rejected;
+    out["in_flight"] = snapshot.in_flight;
+    out["peak_in_flight"] = snapshot.peak_in_flight;
+    out["retained_tasks"] = snapshot.retained_tasks;
+    auto histogram = [](const auto& latency) {
+      py::dict h;
+      h["bounds_us"] = stratakv::control::TaskMetrics::bounds_us;
+      h["buckets"] = latency.buckets;
+      h["count"] = latency.count;
+      h["sum_seconds"] = latency.sum_seconds;
+      return h;
+    };
+    out["get_latency"] = histogram(snapshot.get_latency);
+    out["put_latency"] = histogram(snapshot.put_latency);
+    return out;
+  }
+
   std::uint32_t NumInFlight() const {
     return engine_ == nullptr ? 0 : engine_->num_in_flight();
   }
@@ -735,6 +762,8 @@ PYBIND11_MODULE(_core, m) {
       .def("shutdown", &PyEngine::Shutdown, py::arg("grace_ms") = 100.0,
            py::call_guard<py::gil_scoped_release>(),
            "Cancel outstanding tasks and drain (GIL released).")
+      .def("metrics", &PyEngine::Metrics)
+      .def("forget", &PyEngine::Forget, py::arg("task_id"))
       .def("num_in_flight", &PyEngine::NumInFlight)
       .def("num_free_blocks", &PyEngine::FreeBlocks, py::arg("group"))
       .def("num_free_states", &PyEngine::FreeStates, py::arg("group"))

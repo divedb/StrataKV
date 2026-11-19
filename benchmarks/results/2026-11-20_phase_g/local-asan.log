@@ -1,0 +1,8 @@
+Internal ctest changing into directory: /home/gc/StrataKV/build-asan
+Test project /home/gc/StrataKV/build-asan
+    Start 1: stratakv_unit_tests
+1/1 Test #1: stratakv_unit_tests ..............   Passed    0.45 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.45 sec

@@ -19,23 +19,21 @@ namespace stratakv::control {
 namespace {
 
 /// \brief Metadata side effects of one terminal transition, applied by
-/// the call site AFTER releasing the engine lock (the plane takes its
-/// own locks; never nested under ours).
+/// the call site while holding the engine lock, before publishing completion.
 struct TerminalEffects {
-  metadata::MatchResult match;              // Release pins (get).
+  metadata::MatchResult match;                 // Release pins (get).
   common::CacheEntry* commit_entry = nullptr;  // CommitPut (put success).
 };
 
 }  // namespace
 
-/// \brief One tracked task. Records live until engine destruction
-/// (simple lifetime story; reclamation of terminal records is a Phase E
-/// growth item).
+/// \brief One tracked task, retained until Forget or engine destruction.
 struct TaskRecord {
   std::uint64_t id = 0;
   common::TaskState state = common::TaskState::kStaged;
   std::string error;
   bool is_put = false;
+  std::chrono::steady_clock::time_point submitted_at;
   std::uint32_t remaining_ops = 0;
   metadata::MatchResult match;            // Get: pins released on
                                           // terminal.
@@ -53,25 +51,23 @@ struct TaskEngine::Impl {
   std::uint32_t in_flight = 0;
   std::uint64_t next_task_id = 1;
   bool shutting_down = false;
+  TaskMetrics metrics;
 
-  std::unique_ptr<CompletionDispatcher> dispatcher;
+  std::shared_ptr<CompletionDispatcher> dispatcher;
   CompletionCallback completion_callback;
 
   // Completion pipe (portable eventfd stand-in; ADR 0004). Non-blocking
   // both ends: executor threads never block on write; drain loops never
   // block on read.
   int notify_fd[2] = {-1, -1};
-  std::deque<common::TaskHandle> pending_events;
+  std::deque<std::pair<common::TaskHandle, common::TaskState>> pending_events;
 
   // Op ids pack (task_id << 20) | op_index; bounded by
   // config.max_ops_per_task < 2^20.
-  static std::uint64_t PackOpId(std::uint64_t task_id,
-                                std::uint32_t op_index) {
+  static std::uint64_t PackOpId(std::uint64_t task_id, std::uint32_t op_index) {
     return (task_id << 20) | op_index;
   }
-  static std::uint64_t TaskOfOp(std::uint64_t op_id) {
-    return op_id >> 20;
-  }
+  static std::uint64_t TaskOfOp(std::uint64_t op_id) { return op_id >> 20; }
 
   void NotifyFdLocked() {
     if (notify_fd[1] >= 0) {
@@ -83,7 +79,7 @@ struct TaskEngine::Impl {
 
   /// \brief Drive one task to a terminal state exactly once. Requires
   /// mu held; emits the fd byte + condvar signal and RETURNS the
-  /// metadata side effects for the caller to apply unlocked.
+  /// metadata side effects for the caller to apply while still locked.
   TerminalEffects FinishLocked(std::uint64_t id, common::TaskState state,
                                std::string error) {
     TerminalEffects effects;
@@ -98,7 +94,20 @@ struct TaskEngine::Impl {
     task.state = state;
     task.error = std::move(error);
     --in_flight;
-    pending_events.push_back(common::TaskHandle(task.id));
+    if (state == common::TaskState::kSucceeded) ++metrics.succeeded;
+    if (state == common::TaskState::kFailed) ++metrics.failed;
+    if (state == common::TaskState::kCancelled) ++metrics.cancelled;
+    auto& latency = task.is_put ? metrics.put_latency : metrics.get_latency;
+    const auto elapsed = std::chrono::steady_clock::now() - task.submitted_at;
+    const double us =
+        std::chrono::duration<double, std::micro>(elapsed).count();
+    const auto bucket = std::lower_bound(TaskMetrics::bounds_us.begin(),
+                                         TaskMetrics::bounds_us.end(), us);
+    ++latency.buckets[static_cast<std::size_t>(bucket -
+                                               TaskMetrics::bounds_us.begin())];
+    ++latency.count;
+    latency.sum_seconds += us / 1000000.0;
+    pending_events.emplace_back(common::TaskHandle(task.id), state);
     NotifyFdLocked();
     cv.notify_all();
 
@@ -169,8 +178,7 @@ TaskEngine::~TaskEngine() {
 }
 
 common::TaskHandle TaskEngine::SubmitGet(
-    metadata::MatchResult match,
-    std::span<const common::BlockId> gpu_slots,
+    metadata::MatchResult match, std::span<const common::BlockId> gpu_slots,
     std::span<const std::uint32_t> gpu_state_slots) {
   if (match.matched_blocks > 0 && match.pin == nullptr) {
     throw std::invalid_argument(
@@ -281,21 +289,23 @@ common::TaskHandle TaskEngine::SubmitPut(
                 std::move(plan));
 }
 
-common::TaskHandle TaskEngine::Submit(
-    TransferGraph graph, bool is_put, metadata::MatchResult match,
-    metadata::MetadataPlane::PutPlan plan) {
+common::TaskHandle TaskEngine::Submit(TransferGraph graph, bool is_put,
+                                      metadata::MatchResult match,
+                                      metadata::MetadataPlane::PutPlan plan) {
   TerminalEffects effects;
   bool has_effects = false;
   common::TaskHandle handle;
   {
     std::lock_guard<std::mutex> lock(impl_->mu);
     if (impl_->shutting_down) {
+      ++impl_->metrics.rejected;
       throw LogicError("TaskEngine: shut down; submissions rejected");
     }
     if (impl_->in_flight >= impl_->config.max_in_flight) {
-      throw NotEnoughSpaceError(
-          "TaskEngine: saturated (" +
-          std::to_string(impl_->config.max_in_flight) + " in flight)");
+      ++impl_->metrics.rejected;
+      throw NotEnoughSpaceError("TaskEngine: saturated (" +
+                                std::to_string(impl_->config.max_in_flight) +
+                                " in flight)");
     }
     if (graph.ops().size() > impl_->config.max_ops_per_task) {
       throw std::invalid_argument("TaskEngine: graph too large");
@@ -305,6 +315,11 @@ common::TaskHandle TaskEngine::Submit(
     TaskRecord& task = impl_->tasks[id];
     task.id = id;
     task.is_put = is_put;
+    task.submitted_at = std::chrono::steady_clock::now();
+    if (is_put)
+      ++impl_->metrics.submitted_puts;
+    else
+      ++impl_->metrics.submitted_gets;
     task.match = std::move(match);
     task.plan = std::move(plan);
     task.remaining_ops = static_cast<std::uint32_t>(graph.ops().size());
@@ -325,11 +340,14 @@ common::TaskHandle TaskEngine::Submit(
     graph = std::move(assigned);
 
     ++impl_->in_flight;
+    impl_->metrics.peak_in_flight =
+        std::max(impl_->metrics.peak_in_flight,
+                 static_cast<std::uint64_t>(impl_->in_flight));
     if (task.remaining_ops == 0) {
       // Nothing to execute (e.g., fully-matched get): succeed now,
       // without the executor.
-      effects = impl_->FinishLocked(id, common::TaskState::kSucceeded,
-                                     std::string());
+      effects =
+          impl_->FinishLocked(id, common::TaskState::kSucceeded, std::string());
       impl_->ApplyEffects(effects);
       has_effects = true;
     } else {
@@ -354,8 +372,7 @@ bool TaskEngine::Cancel(common::TaskHandle handle) {
       return false;
     }
     launched = it->second.state == common::TaskState::kLaunched;
-    effects = impl_->FinishLocked(handle.id(),
-                                  common::TaskState::kCancelled,
+    effects = impl_->FinishLocked(handle.id(), common::TaskState::kCancelled,
                                   "cancelled by caller");
     impl_->ApplyEffects(effects);
   }
@@ -394,9 +411,8 @@ WaitResult TaskEngine::Wait(std::span<const common::TaskHandle> handles,
   {
     std::unique_lock<std::mutex> lock(impl_->mu);
     const bool all_known =
-        std::all_of(handles.begin(), handles.end(), [&](auto h) {
-          return impl_->tasks.count(h.id()) > 0;
-        });
+        std::all_of(handles.begin(), handles.end(),
+                    [&](auto h) { return impl_->tasks.count(h.id()) > 0; });
     if (all_known) {
       impl_->cv.wait_until(lock, deadline, [&] {
         return std::all_of(handles.begin(), handles.end(), [&](auto h) {
@@ -418,14 +434,14 @@ void TaskEngine::DrainCompletions() {
   while (::read(impl_->notify_fd[0], buffer, sizeof(buffer)) > 0) {
   }
 
-  std::deque<common::TaskHandle> events;
+  std::deque<std::pair<common::TaskHandle, common::TaskState>> events;
   CompletionCallback callback;
-  CompletionDispatcher* dispatcher = nullptr;
+  std::shared_ptr<CompletionDispatcher> dispatcher;
   {
     std::lock_guard<std::mutex> lock(impl_->mu);
     events.swap(impl_->pending_events);
     callback = impl_->completion_callback;
-    dispatcher = impl_->dispatcher.get();
+    dispatcher = impl_->dispatcher;
   }
   if (callback == nullptr) {
     return;  // Nothing installed; events stay drained.
@@ -433,13 +449,7 @@ void TaskEngine::DrainCompletions() {
 
   // Delivery context (ADR 0004): THIS thread, or the dispatcher's
   // single documented context when one is installed.
-  for (const common::TaskHandle handle : events) {
-    const WaitResult snapshot = TryWait(
-        std::span<const common::TaskHandle>(&handle, 1));
-    if (snapshot.items.empty()) {
-      continue;
-    }
-    const common::TaskState state = snapshot.items[0].state;
+  for (const auto& [handle, state] : events) {
     if (dispatcher != nullptr) {
       dispatcher->Dispatch(
           [callback, handle, state] { callback(handle, state); });
@@ -474,9 +484,8 @@ void TaskEngine::Shutdown(std::chrono::milliseconds grace) {
         if (task.state == common::TaskState::kLaunched) {
           launched.emplace_back(id);
         }
-        effects.push_back(
-            impl_->FinishLocked(id, common::TaskState::kCancelled,
-                                "engine shutdown"));
+        effects.push_back(impl_->FinishLocked(id, common::TaskState::kCancelled,
+                                              "engine shutdown"));
       }
     }
     for (const TerminalEffects& effect : effects) {
@@ -499,6 +508,27 @@ std::uint32_t TaskEngine::num_in_flight() const {
   return impl_->in_flight;
 }
 
+TaskMetrics TaskEngine::Metrics() const {
+  std::lock_guard<std::mutex> lock(impl_->mu);
+  TaskMetrics snapshot = impl_->metrics;
+  snapshot.in_flight = impl_->in_flight;
+  snapshot.retained_tasks = impl_->tasks.size();
+  return snapshot;
+}
+
+bool TaskEngine::Forget(common::TaskHandle handle) {
+  std::lock_guard<std::mutex> lock(impl_->mu);
+  const auto it = impl_->tasks.find(handle.id());
+  if (it == impl_->tasks.end() || !common::IsTerminal(it->second.state)) {
+    return false;
+  }
+  impl_->tasks.erase(it);
+  std::erase_if(impl_->pending_events, [handle](const auto& pending) {
+    return pending.first == handle;
+  });
+  return true;
+}
+
 void TaskEngine::OnOpCompleted(std::uint64_t op_id, bool ok) {
   TerminalEffects effects;
   {
@@ -519,11 +549,11 @@ void TaskEngine::OnOpCompleted(std::uint64_t op_id, bool ok) {
       task.error = "op " + std::to_string(op_id) + " failed";
     }
     if (task.remaining_ops == 0) {
-      effects = impl_->FinishLocked(
-          task.id,
-          task.error.empty() ? common::TaskState::kSucceeded
-                             : common::TaskState::kFailed,
-          task.error);
+      effects =
+          impl_->FinishLocked(task.id,
+                              task.error.empty() ? common::TaskState::kSucceeded
+                                                 : common::TaskState::kFailed,
+                              task.error);
       impl_->ApplyEffects(effects);
     }
   }

@@ -58,7 +58,6 @@ class CudaStreamTransport final : public ITransport {
   /// \param table Tier-local id addressing (copied; the memory it
   /// points at — CpuTier pools, registered GPU buffers — must outlive
   /// the transport).
-  /// \param config Pool sizing.
   ///
   /// \throws std::runtime_error when no usable CUDA device exists.
   ///
@@ -66,6 +65,9 @@ class CudaStreamTransport final : public ITransport {
   /// default argument): nvcc 12.0's host front end rejects NSDMIs in
   /// same-class default arguments.
   explicit CudaStreamTransport(TierTable table);
+  /// \brief Construct a stream transport with explicit pool sizing.
+  /// \param table Tier-local addressing; backing memory must outlive transport.
+  /// \param config Pool sizing.
   CudaStreamTransport(TierTable table, Config config);
   ~CudaStreamTransport() override;
 

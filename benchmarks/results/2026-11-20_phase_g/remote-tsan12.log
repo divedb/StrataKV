@@ -1,0 +1,75 @@
+-- The CXX compiler identification is GNU 12.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/g++-12 - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- The C compiler identification is GNU 12.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/gcc-12 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Could NOT find Python3 (missing: Python3_EXECUTABLE Interpreter) 
+-- Looking for pthread.h
+-- Looking for pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /root/autodl-tmp/StrataKV/build-tsan12
+[  2%] Building CXX object third_party/googletest-build/googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[  5%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/handles.cpp.o
+[ 11%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/model_layout.cpp.o
+[ 11%] Building CXX object src/CMakeFiles/stratakv_core.dir/common/types.cpp.o
+[ 13%] Linking CXX static library libstratakv_core.a
+[ 13%] Built target stratakv_core
+[ 16%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/radix_index.cpp.o
+[ 19%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/hasher.cpp.o
+[ 25%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/metadata_plane.cpp.o
+[ 25%] Building CXX object src/CMakeFiles/stratakv_metadata.dir/metadata/allocator.cpp.o
+[ 27%] Linking CXX static library libstratakv_metadata.a
+[ 27%] Built target stratakv_metadata
+[ 33%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/executor.cpp.o
+[ 33%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/task_engine.cpp.o
+[ 36%] Linking CXX static library ../../../lib/libgtest.a
+[ 36%] Built target gtest
+[ 38%] Building CXX object third_party/googletest-build/googletest/CMakeFiles/gtest_main.dir/src/gtest_main.cc.o
+[ 41%] Linking CXX static library ../../../lib/libgtest_main.a
+[ 41%] Built target gtest_main
+[ 44%] Linking CXX static library libstratakv_control.a
+[ 44%] Built target stratakv_control
+[ 47%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/registry.cpp.o
+[ 50%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/host_memory.cpp.o
+[ 52%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/tier_table.cpp.o
+[ 55%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/cpu_tier.cpp.o
+[ 58%] Building CXX object src/CMakeFiles/stratakv_data.dir/data/transport.cpp.o
+[ 61%] Linking CXX static library libstratakv_data.a
+[ 61%] Built target stratakv_data
+[ 63%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/handles_test.cpp.o
+[ 66%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/types_test.cpp.o
+[ 72%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/model_layout_test.cpp.o
+[ 72%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/hasher_test.cpp.o
+[ 75%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/allocator_test.cpp.o
+[ 77%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/radix_index_test.cpp.o
+[ 80%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_plane_test.cpp.o
+[ 83%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/metadata_fuzz_test.cpp.o
+[ 86%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/task_engine_test.cpp.o
+[ 88%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/registry_test.cpp.o
+[ 91%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/cpu_tier_test.cpp.o
+[ 94%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/tier_table_test.cpp.o
+/root/autodl-tmp/StrataKV/tests/cpp/registry_test.cpp:35:13: warning: ‘stratakv::common::ModelLayout {anonymous}::Layout()’ defined but not used [-Wunused-function]
+   35 | ModelLayout Layout() {
+      |             ^~~~~~
+[ 97%] Building CXX object tests/cpp/CMakeFiles/stratakv_unit_tests.dir/transfer_scheduler_test.cpp.o
+[100%] Linking CXX executable stratakv_unit_tests
+[100%] Built target stratakv_unit_tests
+Internal ctest changing into directory: /root/autodl-tmp/StrataKV/build-tsan12
+Test project /root/autodl-tmp/StrataKV/build-tsan12
+    Start 1: stratakv_unit_tests
+1/1 Test #1: stratakv_unit_tests ..............   Passed    1.66 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.66 sec

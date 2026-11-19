@@ -10,6 +10,11 @@ option(STRATAKV_GPU "Enable GPU-dependent components (Phase E and later)" OFF)
 option(STRATAKV_PYTHON "Build pybind11 Python bindings" OFF)
 option(STRATAKV_BUILD_TESTS "Build unit tests" ON)
 option(STRATAKV_ENABLE_SANITIZERS "Enable ASan+UBSan on CPU targets" OFF)
+option(STRATAKV_ENABLE_TSAN "Enable ThreadSanitizer on CPU targets" OFF)
+if(STRATAKV_ENABLE_TSAN AND (STRATAKV_ENABLE_SANITIZERS OR STRATAKV_GPU))
+  message(FATAL_ERROR "TSan requires a separate CPU build without ASan/UBSan")
+endif()
+option(STRATAKV_BUILD_DOCS "Build Doxygen API documentation" OFF)
 option(STRATAKV_GTEST_SHIM
   "Offline bootstrap: use the bundled minimal GoogleTest-compatible shim
    instead of the pinned googletest submodule. CI must use the submodule."
@@ -81,3 +86,11 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/stratakvConfig.cmake"
 install(EXPORT stratakv-targets
   NAMESPACE stratakv::
   DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/stratakv")
+
+if(STRATAKV_BUILD_DOCS)
+  find_package(Doxygen REQUIRED)
+  set(DOXYGEN_EXTRACT_ALL YES)
+  set(DOXYGEN_GENERATE_LATEX NO)
+  doxygen_add_docs(stratakv_api_docs include/stratakv
+    COMMENT "Generate the StrataKV C++ API reference")
+endif()

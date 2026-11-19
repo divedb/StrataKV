@@ -1,0 +1,42 @@
+[  7%] Built target stratakv_core
+[ 10%] Built target stratakv_gpu_baseline
+[ 14%] Built target stratakv_ipc_probe
+[ 18%] Built target gtest
+[ 21%] Built target gtest_main
+[ 30%] Built target stratakv_metadata
+Consolidate compiler generated dependencies of target stratakv_control
+[ 34%] Built target stratakv_index_bench
+[ 36%] Building CXX object src/CMakeFiles/stratakv_control.dir/control/task_engine.cpp.o
+[ 38%] Linking CXX static library libstratakv_control.a
+[ 40%] Built target stratakv_control
+[ 60%] Built target stratakv_data
+Consolidate compiler generated dependencies of target stratakv_gpu_transport_bench
+Consolidate compiler generated dependencies of target stratakv_gpu_tests
+Consolidate compiler generated dependencies of target stratakv_bindings
+[ 61%] Linking CXX executable stratakv_transfer_worker
+[ 63%] Linking CXX executable stratakv_gpu_transport_bench
+Consolidate compiler generated dependencies of target stratakv_unit_tests
+[ 65%] Linking CXX shared module ../../../python/stratakv/_core.cpython-312-x86_64-linux-gnu.so
+[ 67%] Building CXX object tests/cpp/CMakeFiles/stratakv_gpu_tests.dir/gpu_transport_test.cpp.o
+[ 69%] Linking CXX executable stratakv_unit_tests
+[ 70%] Built target stratakv_transfer_worker
+[ 72%] Built target stratakv_gpu_transport_bench
+[ 96%] Built target stratakv_unit_tests
+lto-wrapper: warning: using serial compilation of 5 LTRANS jobs
+[ 98%] Linking CXX executable stratakv_gpu_tests
+[ 98%] Built target stratakv_gpu_tests
+[100%] Built target stratakv_bindings
+Internal ctest changing into directory: /root/autodl-tmp/StrataKV/build-py
+Test project /root/autodl-tmp/StrataKV/build-py
+    Start 1: stratakv_python_tests
+1/4 Test #1: stratakv_python_tests ............   Passed    0.92 sec
+    Start 2: stratakv_connector_tests
+2/4 Test #2: stratakv_connector_tests .........   Passed   46.96 sec
+    Start 3: stratakv_gpu_tests
+3/4 Test #3: stratakv_gpu_tests ...............   Passed    1.03 sec
+    Start 4: stratakv_unit_tests
+4/4 Test #4: stratakv_unit_tests ..............   Passed    0.09 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Total Test time (real) =  49.00 sec

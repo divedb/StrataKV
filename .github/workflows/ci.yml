@@ -78,3 +78,34 @@ jobs:
 
       - name: Test (C++ unit + Python engine suite)
         run: ctest --test-dir build --output-on-failure
+
+  thread-sanitizer:
+    name: ubuntu-22.04 / ThreadSanitizer (GCC 12)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned third-party sources
+        run: ./scripts/fetch_third_party.sh
+      - name: Install GCC 12
+        run: sudo apt-get update && sudo apt-get install -y g++-12
+      - name: Configure
+        run: cmake -S . -B build-tsan -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_BUILD_TYPE=Debug -DSTRATAKV_ENABLE_TSAN=ON
+      - name: Build
+        run: cmake --build build-tsan -j 2
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build-tsan --output-on-failure --timeout 180
+
+  api-docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/fetch_third_party.sh
+      - run: sudo apt-get update && sudo apt-get install -y doxygen
+      - run: cmake -S . -B build-docs -DSTRATAKV_BUILD_TESTS=OFF -DSTRATAKV_BUILD_DOCS=ON
+      - run: cmake --build build-docs --target stratakv_api_docs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpp-api-reference
+          path: build-docs/html

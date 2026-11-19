@@ -169,4 +169,18 @@ TEST(DeviceMemoryRegistryTest, IpcContractAndImmediateInvalidation) {
   EXPECT_FALSE(registry.IsHandleValid(handles[0]));  // Old still dead.
 }
 
+TEST(DeviceMemoryRegistryTest, RepeatedRegistrationInvalidatesOldHandles) {
+  DeviceMemoryRegistry registry;
+  auto source = std::make_shared<CountingIpcSource>();
+  registry.SetIpcHandleSource(source);
+  for (int iteration = 0; iteration < 100; ++iteration) {
+    auto id = registry.RegisterGroup(LayerwiseDescriptor());
+    auto handles = registry.ExportIpcHandles(id);
+    EXPECT_TRUE(registry.IsHandleValid(handles[0]));
+    registry.Unregister(id);
+    EXPECT_FALSE(registry.IsHandleValid(handles[0]));
+    EXPECT_EQ(registry.num_registrations(), 0u);
+  }
+}
+
 }  // namespace

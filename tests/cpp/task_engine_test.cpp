@@ -41,8 +41,8 @@ using stratakv::common::TaskHandle;
 using stratakv::common::TaskState;
 using stratakv::common::TokenId;
 using stratakv::control::CompletionSink;
-using stratakv::control::ITaskExecutor;
 using stratakv::control::InlineExecutor;
+using stratakv::control::ITaskExecutor;
 using stratakv::control::TaskEngine;
 using stratakv::control::TaskEngineConfig;
 using stratakv::control::TransferGraph;
@@ -80,16 +80,14 @@ MetadataPlaneConfig TestPools() {
 }
 
 TaskState State(TaskEngine& engine, const TaskHandle& handle) {
-  return engine
-      .TryWait(std::span<const TaskHandle>(&handle, 1))
+  return engine.TryWait(std::span<const TaskHandle>(&handle, 1))
       .items.at(0)
       .state;
 }
 
 TaskState WaitOne(TaskEngine& engine, const TaskHandle& handle,
                   std::chrono::milliseconds timeout) {
-  return engine
-      .Wait(std::span<const TaskHandle>(&handle, 1), timeout)
+  return engine.Wait(std::span<const TaskHandle>(&handle, 1), timeout)
       .items.at(0)
       .state;
 }
@@ -195,8 +193,7 @@ TEST(TaskEngineTest, SubmitValidation) {
   // Unpinned match with matched blocks is rejected.
   stratakv::metadata::MatchOptions raw{/*lock_matched=*/false,
                                        /*require_ready=*/false};
-  const MatchResult unpinned =
-      plane.index().Match(Tok({1, 2, 3, 4}), 2, raw);
+  const MatchResult unpinned = plane.index().Match(Tok({1, 2, 3, 4}), 2, raw);
   ASSERT_EQ(unpinned.matched_blocks, 2u);  // Staged, not ready.
   EXPECT_THROW((void)engine.SubmitGet(unpinned, Slots({0, 1})),
                std::invalid_argument);
@@ -264,9 +261,8 @@ TEST(TaskEngineTest, OpFailureFailsTaskAndReleasesPins) {
   (void)executor->Pump(1, /*ok=*/false, engine);
   EXPECT_EQ(WaitOne(engine, put, std::chrono::milliseconds(100)),
             TaskState::kFailed);
-  const WaitResult done =
-      engine.Wait(std::span<const TaskHandle>(&put, 1),
-                  std::chrono::milliseconds(1));
+  const WaitResult done = engine.Wait(std::span<const TaskHandle>(&put, 1),
+                                      std::chrono::milliseconds(1));
   EXPECT_FALSE(done.items.at(0).error.empty());
   EXPECT_EQ(plane.MatchForGet(Tok({1, 2, 3, 4})).matched_blocks, 0u);
   (void)plane.AbortPut(plan.entry);
@@ -320,7 +316,7 @@ TEST(TaskEngineTest, CompletionFdSignalsAndDrainDispatches) {
   }
   (void)executor->PumpAll(true, engine);
 
-  struct pollfd pfd{};
+  struct pollfd pfd {};
   pfd.fd = engine.CompletionFd();
   pfd.events = POLLIN;
   EXPECT_GT(::poll(&pfd, 1, /*timeout_ms=*/100), 0);
@@ -341,7 +337,7 @@ TEST(TaskEngineTest, CompletionFdSignalsAndDrainDispatches) {
   engine.OnOpCompleted(0xFFFFFFFFFFFFULL, true);
 
   // Pipe drained: poll reports not-readable now.
-  struct pollfd pfd2{};
+  struct pollfd pfd2 {};
   pfd2.fd = engine.CompletionFd();
   pfd2.events = POLLIN;
   EXPECT_NE(::poll(&pfd2, 1, /*timeout_ms=*/0), 1);
@@ -392,13 +388,11 @@ TEST(TaskEngineTest, StressTenKTasksWithRandomCancels) {
       }
       plans.push_back(plan);
     } else if (action < 7 && !handles.empty()) {
-      std::uniform_int_distribution<std::size_t> pick(0,
-                                                      handles.size() - 1);
+      std::uniform_int_distribution<std::size_t> pick(0, handles.size() - 1);
       (void)engine.Cancel(handles[pick(rng)]);
     } else if (action < 9) {
       (void)executor->Pump(
-          std::uniform_int_distribution<std::size_t>(1, 8)(rng), true,
-          engine);
+          std::uniform_int_distribution<std::size_t>(1, 8)(rng), true, engine);
     } else {
       const MatchResult match = plane.MatchForGet(random_tokens());
       std::vector<BlockId> slots_size(match.block_refs.size(), 0);
@@ -463,6 +457,163 @@ TEST(TaskEngineTest, ShutdownMidFlightCancelsAndIsIdempotent) {
 
   // Late completions after shutdown are still dropped safely.
   (void)executor->PumpAll(true, engine);
+}
+
+TEST(TaskEngineHardeningTest, ConcurrentSnapshotsAndRecordReclamation) {
+  const ModelLayout layout = Homogeneous(2);
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      TestPools());
+  TaskEngine engine(&plane, std::make_shared<InlineExecutor>());
+  std::atomic<bool> stop{false};
+  std::atomic<bool> coherent{true};
+  std::thread observer([&] {
+    while (!stop.load()) {
+      const auto m = engine.Metrics();
+      if (m.submitted_gets + m.submitted_puts !=
+          m.succeeded + m.failed + m.cancelled + m.in_flight)
+        coherent = false;
+      engine.DrainCompletions();
+    }
+  });
+  std::vector<std::thread> producers;
+  for (int t = 0; t < 4; ++t) {
+    producers.emplace_back([&] {
+      for (int i = 0; i < 1000; ++i) {
+        auto h = engine.SubmitGet({}, {});
+        if (!engine.Forget(h)) coherent = false;
+      }
+    });
+  }
+  for (auto& thread : producers) thread.join();
+  stop = true;
+  observer.join();
+  EXPECT_TRUE(coherent.load());
+  const auto m = engine.Metrics();
+  EXPECT_EQ(m.submitted_gets, 4000u);
+  EXPECT_EQ(m.succeeded, 4000u);
+  EXPECT_EQ(m.retained_tasks, 0u);
+  EXPECT_EQ(m.get_latency.count, 4000u);
+  std::uint64_t bucket_count = 0;
+  for (auto count : m.get_latency.buckets) bucket_count += count;
+  EXPECT_EQ(bucket_count, m.get_latency.count);
+}
+
+TEST(TaskEngineHardeningTest, FailureCancelRejectionAndForget) {
+  const ModelLayout layout = Homogeneous(2);
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      TestPools());
+  auto executor = std::make_shared<ManualExecutor>();
+  TaskEngineConfig config;
+  config.max_in_flight = 1;
+  TaskEngine engine(&plane, executor, config);
+  auto plan = plane.StagePut(Tok({1, 2}));
+  auto failed = engine.SubmitPut(plan, Slots({0}));
+  EXPECT_FALSE(engine.Forget(failed));
+  EXPECT_THROW((void)engine.SubmitGet({}, {}), stratakv::NotEnoughSpaceError);
+  (void)executor->PumpAll(false, engine);
+  EXPECT_EQ(State(engine, failed), TaskState::kFailed);
+  EXPECT_TRUE(engine.Forget(failed));
+  EXPECT_FALSE(engine.Forget(failed));
+  (void)plane.AbortPut(plan.entry);
+  plan = plane.StagePut(Tok({3, 4}));
+  auto cancelled = engine.SubmitPut(plan, Slots({0}));
+  engine.Shutdown(std::chrono::milliseconds(0));
+  (void)executor->PumpAll(true, engine);
+  EXPECT_EQ(State(engine, cancelled), TaskState::kCancelled);
+  EXPECT_TRUE(engine.Forget(cancelled));
+  (void)plane.AbortPut(plan.entry);
+  const auto m = engine.Metrics();
+  EXPECT_EQ(m.failed, 1u);
+  EXPECT_EQ(m.cancelled, 1u);
+  EXPECT_EQ(m.rejected, 1u);
+  EXPECT_EQ(m.put_latency.count, 2u);
+  EXPECT_EQ(m.in_flight, 0u);
+}
+
+TEST(TaskEngineHardeningTest, RepeatedConstructionAndShutdown) {
+  for (int iteration = 0; iteration < 100; ++iteration) {
+    const ModelLayout layout = Homogeneous(2);
+    MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                        TestPools());
+    TaskEngine engine(&plane, std::make_shared<InlineExecutor>());
+    auto plan = plane.StagePut(Tok({1, 2, 3, 4}));
+    auto h = engine.SubmitPut(plan, Slots({0, 1}));
+    EXPECT_EQ(State(engine, h), TaskState::kSucceeded);
+    EXPECT_TRUE(engine.Forget(h));
+    engine.Shutdown(std::chrono::milliseconds(0));
+    engine.Shutdown(std::chrono::milliseconds(0));
+    EXPECT_EQ(engine.Metrics().retained_tasks, 0u);
+  }
+}
+
+TEST(TaskEngineHardeningTest, ConcurrentCompletionCancellationAndPolling) {
+  const ModelLayout layout = Homogeneous(2);
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      TestPools());
+  auto executor = std::make_shared<ManualExecutor>();
+  TaskEngine engine(&plane, executor);
+  std::vector<TaskHandle> handles;
+  std::vector<MetadataPlane::PutPlan> plans;
+  for (int i = 0; i < 128; ++i) {
+    auto plan = plane.StagePut(Tok({i + 1, 0}));
+    handles.push_back(engine.SubmitPut(plan, Slots({0})));
+    plans.push_back(plan);
+  }
+  std::thread completer([&] { (void)executor->PumpAll(true, engine); });
+  std::thread canceller([&] {
+    for (auto h : handles) (void)engine.Cancel(h);
+  });
+  auto result = engine.Wait(handles, std::chrono::milliseconds(1000));
+  completer.join();
+  canceller.join();
+  for (const auto& item : result.items) {
+    EXPECT_TRUE(stratakv::common::IsTerminal(item.state));
+    EXPECT_TRUE(engine.Forget(item.handle));
+  }
+  const auto metrics = engine.Metrics();
+  EXPECT_EQ(metrics.succeeded + metrics.cancelled, handles.size());
+  EXPECT_EQ(metrics.put_latency.count, handles.size());
+  EXPECT_EQ(metrics.in_flight, 0u);
+  for (auto plan : plans) {
+    // Aborting committed entries is permitted and reclaims their reservation.
+    (void)plane.AbortPut(plan.entry);
+  }
+}
+
+TEST(TaskEngineHardeningTest, DispatcherCanBeReplacedDuringDispatch) {
+  const ModelLayout layout = Homogeneous(2);
+  MetadataPlane plane(layout, std::make_unique<RadixIndex>(layout),
+                      TestPools());
+  TaskEngine engine(&plane, std::make_shared<InlineExecutor>());
+  bool destroyed = false;
+  bool alive_during_dispatch = false;
+  class ReplacingDispatcher final
+      : public stratakv::control::CompletionDispatcher {
+   public:
+    ReplacingDispatcher(TaskEngine& engine, bool& destroyed, bool& alive)
+        : engine_(engine), destroyed_(destroyed), alive_(alive) {}
+    ~ReplacingDispatcher() override { destroyed_ = true; }
+    void Dispatch(Callback cb) override {
+      engine_.SetDispatcher(nullptr);
+      alive_ = !destroyed_;
+      cb();
+    }
+
+   private:
+    TaskEngine& engine_;
+    bool& destroyed_;
+    bool& alive_;
+  };
+  engine.SetDispatcher(std::make_unique<ReplacingDispatcher>(
+      engine, destroyed, alive_during_dispatch));
+  int callbacks = 0;
+  engine.SetCompletionCallback([&](auto, auto) { ++callbacks; });
+  auto h = engine.SubmitGet({}, {});
+  engine.DrainCompletions();
+  EXPECT_TRUE(alive_during_dispatch);
+  EXPECT_TRUE(destroyed);
+  EXPECT_EQ(callbacks, 1);
+  EXPECT_TRUE(engine.Forget(h));
 }
 
 }  // namespace
