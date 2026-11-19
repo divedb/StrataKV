@@ -132,7 +132,7 @@ TEST(MetadataPlaneTest, ExhaustionLeavesNothingReserved) {
   const std::vector<TokenId> third = Tok({17, 18, 19, 20, 21, 22, 23, 24});
   EXPECT_FALSE(plane.PlanPut(third).feasible);  // Pools at capacity.
 
-  EXPECT_THROW(plane.StagePut(third), stratakv::NotEnoughSpaceError);
+  EXPECT_THROW((void)plane.StagePut(third), stratakv::NotEnoughSpaceError);
 
   // Commit what staged; evicting one block makes room again.
   plane.CommitPut(a.entry);

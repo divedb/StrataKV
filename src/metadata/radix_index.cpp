@@ -41,6 +41,10 @@ struct RadixNode {
   std::map<BlockHash, RadixNode*> children;
   RadixNode* parent = nullptr;
   bool ready = false;
+  /// \brief Aborted put remnant: never servable (ready stays false),
+  /// but evictable (Phase D abort path — split fragments of an aborted
+  /// entry would otherwise be un-evictable forever).
+  bool aborted = false;
   bool in_leaf_list = false;
   std::uint64_t last_access_ns = 0;
   std::vector<common::StateRef> states;        ///< Boundary sidecars.
@@ -84,6 +88,9 @@ struct WalkResult {
   /// boundary carrying a complete, ready state bundle.
   std::uint32_t bundle_boundary = 0;
   RadixNode* bundle_node = nullptr;
+  /// \brief True when the walk crossed aborted (never-landing) nodes —
+  /// inserts must refuse to extend such prefixes.
+  bool saw_aborted = false;
 };
 
 struct RadixIndex::Impl {
@@ -152,9 +159,10 @@ struct RadixIndex::Impl {
   }
 
   bool Evictable(const RadixNode* node) const {
-    if (node == root.get() || !node->is_leaf() || !node->ready) {
+    if (node == root.get() || !node->is_leaf()) {
       return false;
     }
+    if (!node->ready && !node->aborted) return false;  // Data in flight.
     if (node->any_pinned()) return false;
     return (now() - node->last_access_ns) >= grace_ns;
   }
@@ -208,6 +216,9 @@ struct RadixIndex::Impl {
                 query[w.matched + cur_size])
           : cur->children.end();
       if (child != cur->children.end()) {
+        if (cur->aborted) {
+          w.saw_aborted = true;
+        }
         if (cur->ready) {
           w.ready += cur_size;
         } else {
@@ -220,6 +231,9 @@ struct RadixIndex::Impl {
         }
         cur = child->second;
       } else {
+        if (cur->aborted) {
+          w.saw_aborted = true;
+        }
         std::uint32_t matched_length = 0;
         if (cur != root.get()) {
           const std::uint32_t cmp = std::min(
@@ -391,6 +405,11 @@ common::CacheEntry* RadixIndex::Insert(
   std::lock_guard<std::mutex> lock(impl_->mu);
 
   WalkResult w = impl_->Walk(hashes, /*update_time=*/true);
+  if (w.saw_aborted) {
+    throw LogicError(
+        "RadixIndex::Insert: prefix crosses aborted (never-landing) "
+        "blocks — evict them or reset before re-inserting");
+  }
   if (w.matched >= hashes.size()) {
     return nullptr;  // Fully present already (FlexKV parity).
   }
@@ -533,6 +552,68 @@ void RadixIndex::Release(const MatchResult& match) {
   }
   impl_->ApplyPins(w, match.pin->matched_blocks, match.pin->pins_states,
                    -1);
+}
+
+Evicted RadixIndex::RemoveEntry(common::CacheEntry* entry) {
+  std::lock_guard<std::mutex> lock(impl_->mu);
+  auto found = impl_->entry_nodes.find(entry);
+  if (found == impl_->entry_nodes.end()) {
+    throw LogicError("RadixIndex::RemoveEntry: unknown or evicted entry");
+  }
+  RadixNode* node = found->second;
+  if (!node->is_leaf()) {
+    throw LogicError(
+        "RadixIndex::RemoveEntry: entry was extended by a later insert; "
+        "evict instead");
+  }
+  if (node->any_pinned()) {
+    throw LogicError("RadixIndex::RemoveEntry: entry is pinned by a match");
+  }
+
+  Evicted removed;
+  for (const RadixSlot& slot : node->slots) {
+    for (const common::BlockRef& ref : slot.refs) {
+      removed.blocks.push_back(ref);
+    }
+  }
+  removed.states = node->states;
+  removed.entries.push_back(entry);
+
+  RadixNode* parent = node->parent;
+  if (parent != nullptr) {
+    parent->children.erase(node->head_hash());
+    if (parent->is_leaf() && parent != impl_->root.get()) {
+      impl_->AddLeaf(parent);
+    }
+  }
+  impl_->RemoveLeaf(node);
+  impl_->entry_nodes.erase(found);
+
+  // Split fragments of THIS entry's span carry its (never-landing)
+  // blocks: mark them aborted so they stay unservable but become
+  // evictable (same span walk as CommitReady).
+  const std::uint32_t num_token_groups =
+      static_cast<std::uint32_t>(impl_->token_groups.size());
+  const std::uint32_t new_blocks = static_cast<std::uint32_t>(
+      node->entry->blocks.size() / num_token_groups);
+  std::uint32_t len = 0;
+  for (const RadixNode* p = node; p != nullptr; p = p->parent) {
+    len += static_cast<std::uint32_t>(p->size());
+  }
+  const std::uint32_t matched = len - new_blocks;
+  std::uint32_t child_start =
+      len - static_cast<std::uint32_t>(node->size());
+  for (RadixNode* p = node->parent; p != nullptr; p = p->parent) {
+    if (child_start < p->size()) break;
+    child_start -= static_cast<std::uint32_t>(p->size());
+    if (child_start < matched) break;
+    if (!p->ready) {
+      p->aborted = true;
+    }
+  }
+
+  impl_->nodes.erase(node);
+  return removed;
 }
 
 Evicted RadixIndex::Evict(std::uint32_t max_blocks) {

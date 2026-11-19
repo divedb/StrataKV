@@ -127,6 +127,24 @@ tested in `tests/cpp/radix_index_test.cpp`.)
 
 ### Phase D — Control plane (task engine + completion)
 
+**Status: ✅ implemented 2026-11-19** (D1–D4; offline adaptations:
+pybind11 could not be cloned — GitHub egress dropped mid-session — so
+the pin is vendored in-tree from the official v2.13.6 wheel under
+`third_party/pybind11` (standard pip layout, `find_package(pybind11
+CONFIG)`), with conversion to a real submodule noted for when egress
+returns. The design.md `TaskEngine(meta, data::TransferScheduler*)`
+signature is realized as `TaskEngine(meta, ITaskExecutor*)` — the
+executor seam Phase E's scheduler will implement; Phase D ships
+`InlineExecutor` (simulation, per-op delay injection; no bytes moved)
+plus test fakes. Additions beyond design.md, needed by the abort path
+of the cancellation diagram: `IIndex::RemoveEntry` +
+`MetadataPlane::AbortPut`, with aborted-span fragments marked evictable
+(`aborted` node state). Acceptance verified: pytest drives the engine
+end to end (10 tests, incl. hybrid truncation and GIL-heartbeat under
+simulated 100 ms latency); 71 C++ tests incl. 10k-task stress with
+random cancels and shutdown-mid-flight, green in Debug/Release/ASan+
+UBSan; CI gains a Python job.)
+
 **Goal:** event-driven task engine replacing per-step polling.
 
 | # | Task | Deliverable | Size |
@@ -181,7 +199,7 @@ tested in `tests/cpp/radix_index_test.cpp`.)
 | M0 ✅ | E0 audit + clean baseline (done) | — |
 | M1 | A1–A4: baseline ladder closed | **G1** adopt-vs-build decision |
 | M2 ✅ | B complete: skeleton + object model + CI | build/test green |
-| M3 | C+D complete: metadata + control plane, CPU-only | index parity + engine stress pass |
+| M3 ✅ | C+D complete: metadata + control plane, CPU-only | index parity + engine stress pass |
 | M4 | E1–E4: data plane + isolation experiment | **G2** isolation decision with numbers |
 | M5 | F1–F2: vLLM parity on full attention | byte-exact reload, workload parity |
 | M6 | F3–F4 + G: hybrid + hardening | v0.1.0 |

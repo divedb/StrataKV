@@ -53,3 +53,28 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  python:
+    name: ubuntu-24.04 / Python bindings (Phase D)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned third-party sources
+        run: ./scripts/fetch_third_party.sh
+
+      - name: Install pytest
+        run: python3 -m pip install --user pytest
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DSTRATAKV_BUILD_TESTS=ON
+          -DSTRATAKV_PYTHON=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (C++ unit + Python engine suite)
+        run: ctest --test-dir build --output-on-failure

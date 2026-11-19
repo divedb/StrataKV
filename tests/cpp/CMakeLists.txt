@@ -10,7 +10,8 @@ set(STRATAKV_UNIT_TEST_SOURCES
   allocator_test.cpp
   radix_index_test.cpp
   metadata_plane_test.cpp
-  metadata_fuzz_test.cpp)
+  metadata_fuzz_test.cpp
+  task_engine_test.cpp)
 
 if (EXISTS "${PROJECT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
   add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/googletest"
@@ -36,7 +37,7 @@ stratakv_target_defaults(stratakv_unit_tests)
 stratakv_target_warnings(stratakv_unit_tests)
 stratakv_target_sanitizers(stratakv_unit_tests)
 target_link_libraries(stratakv_unit_tests PRIVATE stratakv_core
-  stratakv_metadata stratakv::xxhash)
+  stratakv_metadata stratakv_control stratakv::xxhash)
 
 # hasher_test.cpp includes the vendored xxhash.h (one-shot golden
 # digests); exempt just that cast warning there.

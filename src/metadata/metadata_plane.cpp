@@ -187,14 +187,28 @@ Evicted MetadataPlane::EvictBlocks(std::uint32_t max_blocks) {
         "(Phase C)");
   }
   Evicted evicted = radix->Evict(max_blocks);
+  evicted.bytes_reclaimed = RecycleEvicted(evicted);
+  return evicted;
+}
 
+Evicted MetadataPlane::AbortPut(common::CacheEntry* entry) {
+  auto* radix = dynamic_cast<RadixIndex*>(index_.get());
+  if (radix == nullptr) {
+    throw LogicError(
+        "MetadataPlane::AbortPut: requires RadixIndex (Phase D)");
+  }
+  Evicted reclaimed = radix->RemoveEntry(entry);
+  reclaimed.bytes_reclaimed = RecycleEvicted(reclaimed);
+  return reclaimed;
+}
+
+std::uint64_t MetadataPlane::RecycleEvicted(const Evicted& evicted) {
   std::map<std::uint32_t, std::vector<common::BlockId>> blocks_by_group;
   std::uint64_t bytes = 0;
   for (const common::BlockRef& ref : evicted.blocks) {
     blocks_by_group[ref.group].push_back(ref.block);
     bytes += BlockBytesForGroup(ref.group);
   }
-  evicted.bytes_reclaimed = bytes;
   for (const auto& [group, ids] : blocks_by_group) {
     const auto it = std::find(token_groups_.begin(), token_groups_.end(),
                               group);
@@ -217,7 +231,7 @@ Evicted MetadataPlane::EvictBlocks(std::uint32_t max_blocks) {
                      std::distance(state_groups_.begin(), it))]
         ->Release(ref);
   }
-  return evicted;
+  return bytes;
 }
 
 }  // namespace stratakv::metadata

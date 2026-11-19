@@ -8,11 +8,13 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+python/stratakv/*.so
+python/stratakv/*.dylib
 
 # Cloned third-party sources not yet converted to submodules (fetched by
 # scripts/fetch_third_party.sh). googletest and xxhash are real submodules
-# and must NOT be ignored.
-third_party/pybind11/
+# and must NOT be ignored; pybind11 is vendored in-tree from the pinned
+# v2.13.6 wheel (see third_party/pybind11/README.md).
 
 # Tooling artifacts
 compile_commands.json

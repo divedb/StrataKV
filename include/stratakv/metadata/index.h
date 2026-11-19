@@ -125,6 +125,18 @@ class IIndex {
   /// \brief Drop refcounts acquired by a Match(lock_matched=true).
   /// Idempotent per MatchResult.
   virtual void Release(const MatchResult& match) = 0;
+
+  /// \brief Remove one entry's boundary node and everything it holds
+  /// (Phase D abort path: cancel a staged put and reclaim its
+  /// reservation). The node must be a leaf and unpinned; ready entries
+  /// may be force-removed too. Split-created ancestors are left alone.
+  ///
+  /// \return The reclaimed blocks/states (refs plus the dead entry
+  /// pointer), for recycling into the owning pools.
+  ///
+  /// \throws LogicError if the entry is unknown, still has children
+  /// (a later insert extended it), or is pinned.
+  virtual Evicted RemoveEntry(common::CacheEntry* entry) = 0;
 };
 
 /// \brief Chained-hash radix index (port of FlexKV `CRadixTreeIndex`).
@@ -172,6 +184,8 @@ class RadixIndex final : public IIndex {
   void CommitReady(common::CacheEntry* entry) override;
 
   void Release(const MatchResult& match) override;
+
+  Evicted RemoveEntry(common::CacheEntry* entry) override;
 
   /// \brief Evict up to max_blocks LRU-first from evictable leaves
   /// (leaf, ready, unpinned, grace-expired). Leaf nodes carrying

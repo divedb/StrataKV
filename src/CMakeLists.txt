@@ -14,6 +14,12 @@ add_library(stratakv_metadata
   metadata/metadata_plane.cpp)
 add_library(stratakv::metadata ALIAS stratakv_metadata)
 
+# Control plane (Phase D): task engine, completion, executor seam.
+add_library(stratakv_control
+  control/task_engine.cpp
+  control/executor.cpp)
+add_library(stratakv::control ALIAS stratakv_control)
+
 stratakv_target_defaults(stratakv_core)
 stratakv_target_warnings(stratakv_core)
 stratakv_target_sanitizers(stratakv_core)
@@ -21,6 +27,10 @@ stratakv_target_sanitizers(stratakv_core)
 stratakv_target_defaults(stratakv_metadata)
 stratakv_target_warnings(stratakv_metadata)
 stratakv_target_sanitizers(stratakv_metadata)
+
+stratakv_target_defaults(stratakv_control)
+stratakv_target_warnings(stratakv_control)
+stratakv_target_sanitizers(stratakv_control)
 
 target_include_directories(stratakv_core
   PUBLIC
@@ -40,7 +50,11 @@ target_link_libraries(stratakv_metadata
 set_source_files_properties(metadata/hasher.cpp PROPERTIES
   COMPILE_OPTIONS "-Wno-old-style-cast")
 
-install(TARGETS stratakv_core stratakv_metadata
+target_link_libraries(stratakv_control
+  PUBLIC
+    stratakv::metadata)
+
+install(TARGETS stratakv_core stratakv_metadata stratakv_control
   EXPORT stratakv-targets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")

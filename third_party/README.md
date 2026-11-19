@@ -3,7 +3,7 @@
 | Directory | Upstream | Pin | Form | Used by |
 | --- | --- | --- | --- | --- |
 | `googletest/` | google/googletest | `v1.14.0` | **Git submodule** (gitlink) | `stratakv_unit_tests` |
-| `pybind11/` | pybind/pybind11 | `v2.13.6` | Fetch script clone (convert to submodule next) | `stratakv_bindings` (STRATAKV_PYTHON=ON) |
+| `pybind11/` | pybind/pybind11 | `v2.13.6` | **Vendored in-tree** (official wheel; `pybind11/README.md`) | `stratakv_bindings` (STRATAKV_PYTHON=ON) |
 | `xxhash/` | Cyan4973/xxHash | `v0.8.2` | **Git submodule** (gitlink) | metadata plane chained hashing (Phase C harvest) |
 
 All pins are exact; `scripts/fetch_third_party.sh` materializes the

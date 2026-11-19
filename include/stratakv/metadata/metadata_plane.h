@@ -108,6 +108,15 @@ class MetadataPlane {
   /// acquired by MatchForGet. Idempotent per MatchResult.
   void Release(const MatchResult& match);
 
+  /// \brief Abort a staged put (or force-drop a committed one):
+  /// removes its entry/node from the index and recycles the reserved
+  /// block/state ids into the pools.
+  ///
+  /// \throws LogicError (via the index) if the entry was extended or
+  /// pinned, or is unknown.
+  /// \return The Evicted record describing what was reclaimed.
+  Evicted AbortPut(common::CacheEntry* entry);
+
   /// \brief Evict up to max_blocks LRU-first, recycling reclaimed ids
   /// into the owning pools.
   ///
@@ -136,6 +145,10 @@ class MetadataPlane {
  private:
   PutPlan PlanLocked(std::span<const common::TokenId> tokens,
                      bool stage);
+
+  /// \brief Recycle an Evicted record's ids into the owning pools;
+  /// returns reclaimed bytes (shared by EvictBlocks and AbortPut).
+  std::uint64_t RecycleEvicted(const Evicted& evicted);
 
   const common::ModelLayout& layout_;
   std::unique_ptr<IIndex> index_;

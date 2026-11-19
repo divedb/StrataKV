@@ -25,6 +25,15 @@ add_subdirectory(src)
 if (STRATAKV_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests/cpp)
+  if (STRATAKV_PYTHON)
+    # Phase D acceptance: pytest drives the native engine from Python.
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME stratakv_python_tests
+      COMMAND ${CMAKE_COMMAND} -E env
+        PYTHONPATH=${PROJECT_SOURCE_DIR}/python
+        STRATAKV_REQUIRE_NATIVE=1
+        ${Python3_EXECUTABLE} -m pytest ${PROJECT_SOURCE_DIR}/tests/python -q)
+  endif()
 endif()
 
 option(STRATAKV_BUILD_BENCHMARKS "Build benchmark executables" ON)
