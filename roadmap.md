@@ -158,6 +158,23 @@ UBSan; CI gains a Python job.)
 
 ### Phase E — Data plane (registration, CPU tier, transfer engine)
 
+**Status: ◐ offline portion implemented 2026-11-19** (E1 API/contract
+complete — `DeviceMemoryRegistry` with ADR 0005 lifetime semantics,
+IPC export behind the `IIpcHandleSource` seam (fail-loud LogicError in
+CPU-only builds; the CUDA source lands with the STRATAKV_GPU build on
+the GPU host, its contract unit-tested against a counting source); E2
+complete modulo page-locking — `CpuTier` owns the bytes behind the
+plane's id spaces (id→address math, bounds, chunking policy documented;
+cudaHostRegister pinning arrives with STRATAKV_GPU); E3 scheduler
+complete — `TransferScheduler` drain-and-batch (one Enqueue per batch
+per sink; the FlexKV worker.py harvest), `TransportExecutor` bridging
+the Phase D `ITaskExecutor` seam, end-to-end wiring proven with a fake
+transport (TaskEngine graphs → batched transport → completions drive
+terminal states + CommitPut/Release). Deferred to the GPU host: the
+CUDA `ITransport` + strided kernels (transfer.cu harvest), real IPC
+source, pinning, and E4 (gate G2 isolation experiment) — all queued
+with the Phase A ladder.)
+
 **Goal:** GPU registration + tier transfers, benchmarked in both isolation modes per ADR 0002.
 
 | # | Task | Deliverable | Size |

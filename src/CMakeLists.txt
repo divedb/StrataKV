@@ -20,6 +20,13 @@ add_library(stratakv_control
   control/executor.cpp)
 add_library(stratakv::control ALIAS stratakv_control)
 
+# Data plane (Phase E, offline portion): registry, CPU tier, scheduler.
+add_library(stratakv_data
+  data/registry.cpp
+  data/cpu_tier.cpp
+  data/transport.cpp)
+add_library(stratakv::data ALIAS stratakv_data)
+
 stratakv_target_defaults(stratakv_core)
 stratakv_target_warnings(stratakv_core)
 stratakv_target_sanitizers(stratakv_core)
@@ -31,6 +38,10 @@ stratakv_target_sanitizers(stratakv_metadata)
 stratakv_target_defaults(stratakv_control)
 stratakv_target_warnings(stratakv_control)
 stratakv_target_sanitizers(stratakv_control)
+
+stratakv_target_defaults(stratakv_data)
+stratakv_target_warnings(stratakv_data)
+stratakv_target_sanitizers(stratakv_data)
 
 target_include_directories(stratakv_core
   PUBLIC
@@ -54,7 +65,12 @@ target_link_libraries(stratakv_control
   PUBLIC
     stratakv::metadata)
 
+target_link_libraries(stratakv_data
+  PUBLIC
+    stratakv::control)
+
 install(TARGETS stratakv_core stratakv_metadata stratakv_control
+  stratakv_data
   EXPORT stratakv-targets
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
