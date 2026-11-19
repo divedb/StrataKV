@@ -1,0 +1,12 @@
+# Baseline checks; tighten as the codebase grows. Run via
+#   clang-tidy -p build <source>
+Checks: >
+  bugprone-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/stratakv/.*'
+FormatStyle: file

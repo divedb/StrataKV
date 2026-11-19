@@ -1,0 +1,6 @@
+---
+BasedOnStyle: Google
+Standard: c++20
+AccessModifierOffset: -1
+DerivePointerAlignment: false
+PointerAlignment: Left
